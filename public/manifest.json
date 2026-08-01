@@ -1,0 +1,14 @@
+{
+  "name": "Kopincang Kasir",
+  "short_name": "Kopincang",
+  "description": "Aplikasi kasir Kopincang dengan QRIS, HPP, dan laporan keuangan",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#4A2C2A",
+  "theme_color": "#4A2C2A",
+  "orientation": "portrait",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}
