@@ -192,7 +192,7 @@ function MainApp({currentUser,onLogout,users,onCurrentUserUpdate}){
   const totalLabaKotor=filteredTrx.reduce((s,t)=>s+t.laba,0);
   const totalPemasukan=filteredKas.filter(k=>k.jenis==="pemasukan").reduce((s,k)=>s+k.jumlah,0);
   const totalPengeluaran=filteredKas.filter(k=>k.jenis==="pengeluaran").reduce((s,k)=>s+k.jumlah,0);
-  const labaBersih=totalLabaKotor+totalPemasukan-totalPengeluaran;
+  const labaBersih=totalPenjualan+totalPemasukan-totalPengeluaran;
   const marginPeriod=totalPenjualan?(labaBersih/totalPenjualan)*100:0;
 
   const monthlyData=useMemo(()=>{
@@ -904,11 +904,11 @@ function MainApp({currentUser,onLogout,users,onCurrentUserUpdate}){
 
           <div style={{...S.card,padding:14,marginBottom:0}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 0"}}>
-              <span style={{fontSize:12,color:"#2d1a0e"}}>Laba Kotor Penjualan</span>
-              <span style={{fontSize:13,fontWeight:700,color:"#8B5E3C"}}>+ {rp(totalLabaKotor)}</span>
+              <span style={{fontSize:12,color:"#2d1a0e"}}>Total Penjualan</span>
+              <span style={{fontSize:13,fontWeight:700,color:"#8B5E3C"}}>+ {rp(totalPenjualan)}</span>
             </div>
             <div style={{fontSize:10,color:"#aaa",paddingBottom:6,borderBottom:"1px dashed #f0e6d8"}}>
-              (Harga Jual − HPP) dari {filteredTrx.length} transaksi yang tidak dibatalkan
+              Total omzet dari {filteredTrx.length} transaksi yang tidak dibatalkan
             </div>
 
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 0 6px"}}>
@@ -933,10 +933,10 @@ function MainApp({currentUser,onLogout,users,onCurrentUserUpdate}){
             </div>
           </div>
 
-          {totalPengeluaran>totalLabaKotor+totalPemasukan&&(
+          {totalPengeluaran>totalPenjualan+totalPemasukan&&(
             <div style={{...S.card,background:"#fff7ed",border:"1px solid #fdba74",marginTop:12}}>
               <div style={{fontSize:11,color:"#c2410c",display:"flex",alignItems:"center",gap:6}}>
-                <AlertCircle size={13}/> Pengeluaran kas di periode ini lebih besar dari laba kotor penjualan — cek menu Kas untuk lihat rinciannya.
+                <AlertCircle size={13}/> Pengeluaran kas di periode ini lebih besar dari total penjualan — cek menu Kas untuk lihat rinciannya.
               </div>
             </div>
           )}
