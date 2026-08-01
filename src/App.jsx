@@ -142,6 +142,7 @@ function MainApp({currentUser,onLogout,users,onCurrentUserUpdate}){
   const [editUserModal,setEditUserModal]=useState(null);
   const [editUserForm,setEditUserForm]=useState({id:"",username:"",password:"",nama:"",role:"kasir"});
   const [receiptModal,setReceiptModal]=useState(null);
+  const [labaBreakdownModal,setLabaBreakdownModal]=useState(false);
   const [btDevice,setBtDevice]=useState(null);
   const [btChar,setBtChar]=useState(null);
   const [btStatus,setBtStatus]=useState("disconnected"); // disconnected | connecting | connected | error
@@ -640,7 +641,14 @@ function MainApp({currentUser,onLogout,users,onCurrentUserUpdate}){
                 {label:"Laba Bersih",value:rp(labaBersih),color:labaBersih>=0?"#15803d":"#dc2626"},
                 {label:"Transaksi",value:filteredTrx.length+" nota",color:"#6F4E37"},
                 {label:"Margin Laba",value:marginPeriod.toFixed(1)+"%",color:marginPeriod>=targetMargin?"#15803d":"#d97706"},
-              ].map(s=><div key={s.label} style={{...S.card,padding:12}}><div style={{fontSize:10,color:"#888",marginBottom:4}}>{s.label}</div><div style={{fontSize:15,fontWeight:800,color:s.color}}>{s.value}</div></div>)}
+              ].map(s=>{
+                const clickable=s.label==="Laba Bersih";
+                return(<div key={s.label} onClick={clickable?()=>setLabaBreakdownModal(true):undefined}
+                  style={{...S.card,padding:12,cursor:clickable?"pointer":"default",border:clickable?"1.5px dashed #D9C2A6":undefined,position:"relative"}}>
+                  <div style={{fontSize:10,color:"#888",marginBottom:4,display:"flex",alignItems:"center",gap:4}}>{s.label}{clickable&&<AlertCircle size={10} color="#8B5E3C"/>}</div>
+                  <div style={{fontSize:15,fontWeight:800,color:s.color}}>{s.value}</div>
+                </div>);
+              })}
             </div>
 
             <div style={{fontSize:13,fontWeight:700,color:"#4A2C2A",marginBottom:8,display:"flex",alignItems:"center",gap:6}}><BarChart2 size={14}/>Pendapatan Per Bulan</div>
@@ -885,6 +893,60 @@ function MainApp({currentUser,onLogout,users,onCurrentUserUpdate}){
           </button>
         </div>
       </div>}
+      {/* LABA BERSIH BREAKDOWN MODAL */}
+      {labaBreakdownModal&&<div style={S.overlay} onClick={()=>setLabaBreakdownModal(false)}>
+        <div style={S.sheet} onClick={e=>e.stopPropagation()}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+            <div style={{fontSize:15,fontWeight:800,color:"#4A2C2A"}}>Rincian Laba Bersih</div>
+            <button style={{border:"none",background:"none",cursor:"pointer"}} onClick={()=>setLabaBreakdownModal(false)}><X size={20}/></button>
+          </div>
+          <div style={{fontSize:11,color:"#888",marginBottom:14}}>Periode: <b style={{color:"#6F4E37"}}>{laporanPeriod}</b> · {filteredTrx.length} transaksi aktif</div>
+
+          <div style={{...S.card,padding:14,marginBottom:0}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 0"}}>
+              <span style={{fontSize:12,color:"#2d1a0e"}}>Laba Kotor Penjualan</span>
+              <span style={{fontSize:13,fontWeight:700,color:"#8B5E3C"}}>+ {rp(totalLabaKotor)}</span>
+            </div>
+            <div style={{fontSize:10,color:"#aaa",paddingBottom:6,borderBottom:"1px dashed #f0e6d8"}}>
+              (Harga Jual − HPP) dari {filteredTrx.length} transaksi yang tidak dibatalkan
+            </div>
+
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 0 6px"}}>
+              <span style={{fontSize:12,color:"#2d1a0e"}}>Pemasukan Kas Tambahan</span>
+              <span style={{fontSize:13,fontWeight:700,color:"#15803d"}}>+ {rp(totalPemasukan)}</span>
+            </div>
+            <div style={{fontSize:10,color:"#aaa",paddingBottom:6,borderBottom:"1px dashed #f0e6d8"}}>
+              Dicatat manual di menu Kas sebagai "Pemasukan"
+            </div>
+
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 0 6px"}}>
+              <span style={{fontSize:12,color:"#2d1a0e"}}>Pengeluaran Kas</span>
+              <span style={{fontSize:13,fontWeight:700,color:"#dc2626"}}>− {rp(totalPengeluaran)}</span>
+            </div>
+            <div style={{fontSize:10,color:"#aaa",paddingBottom:6}}>
+              Dicatat manual di menu Kas sebagai "Pengeluaran" (bahan baku, operasional, dll)
+            </div>
+
+            <div style={{borderTop:"2px solid #4A2C2A",marginTop:8,paddingTop:10,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <span style={{fontSize:13,fontWeight:800,color:"#4A2C2A"}}>Laba Bersih</span>
+              <span style={{fontSize:18,fontWeight:900,color:labaBersih>=0?"#15803d":"#dc2626"}}>{rp(labaBersih)}</span>
+            </div>
+          </div>
+
+          {totalPengeluaran>totalLabaKotor+totalPemasukan&&(
+            <div style={{...S.card,background:"#fff7ed",border:"1px solid #fdba74",marginTop:12}}>
+              <div style={{fontSize:11,color:"#c2410c",display:"flex",alignItems:"center",gap:6}}>
+                <AlertCircle size={13}/> Pengeluaran kas di periode ini lebih besar dari laba kotor penjualan — cek menu Kas untuk lihat rinciannya.
+              </div>
+            </div>
+          )}
+
+          <button style={{...S.btn("secondary"),width:"100%",padding:12,marginTop:14}} onClick={()=>{setLabaBreakdownModal(false);setTab("kas");}}>
+            Buka Menu Kas
+          </button>
+        </div>
+      </div>}
+
       {/* EDIT USER MODAL */}
       {editUserModal&&<div style={S.overlay} onClick={()=>setEditUserModal(null)}>
         <div style={S.sheet} onClick={e=>e.stopPropagation()}>
