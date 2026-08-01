@@ -252,7 +252,7 @@ function MainApp({currentUser,onLogout,users,onCurrentUserUpdate}){
     setCart([]);setPayModal("done");
   }
   function cancelOrder(trxId){
-    const trx=transaksi.find(t=>t.id===trxId);if(!trx||trx.metode!=="Tunai"||trx.cancelled)return;
+    const trx=transaksi.find(t=>t.id===trxId);if(!trx||trx.cancelled)return;
     restoreStock(trx.items);
     patchDoc("kopincang_transaksi", trxId, {cancelled:true});
     setCancelModal(null);
@@ -511,7 +511,7 @@ function MainApp({currentUser,onLogout,users,onCurrentUserUpdate}){
                         <button onClick={()=>printReceipt(t)} style={{...S.btn("secondary"),padding:"5px 7px"}} title="Cetak (dialog print)"><Printer size={13}/></button>
                         {btStatus==="connected"&&<button onClick={()=>printViaBluetooth(t)} style={{...S.btn("green"),padding:"5px 7px"}} title="Cetak via printer Bluetooth">BT</button>}
                         <button onClick={()=>downloadReceipt(t)} style={{...S.btn("secondary"),padding:"5px 7px"}} title="Unduh struk"><Download size={13}/></button>
-                        {!t.cancelled&&t.metode==="Tunai"&&<button onClick={()=>setCancelModal(t)} style={{...S.btn("danger"),padding:"5px 8px",fontSize:11}}><XCircle size={13}/></button>}
+                        {!t.cancelled&&<button onClick={()=>setCancelModal(t)} style={{...S.btn("danger"),padding:"5px 8px",fontSize:11}}><XCircle size={13}/></button>}
                       </div>
                     </div>
                   </div>
@@ -692,7 +692,7 @@ function MainApp({currentUser,onLogout,users,onCurrentUserUpdate}){
               </div>
               <div style={{textAlign:"center",marginBottom:20}}><div style={{fontSize:11,color:"#888"}}>Total</div><div style={{fontSize:28,fontWeight:900,color:"#4A2C2A"}}>{rp(cartTotal)}</div></div>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-                <button onClick={()=>setPayModal("qris")} style={{...S.btn("secondary"),padding:18,display:"flex",flexDirection:"column",alignItems:"center",gap:8,borderRadius:14,border:"2px solid #D9C2A6"}}><QrCode size={32} color="#6F4E37"/><span style={{fontWeight:800,color:"#4A2C2A"}}>QRIS</span><span style={{fontSize:10,color:"#888",fontWeight:400}}>Tidak bisa dibatalkan</span></button>
+                <button onClick={()=>setPayModal("qris")} style={{...S.btn("secondary"),padding:18,display:"flex",flexDirection:"column",alignItems:"center",gap:8,borderRadius:14,border:"2px solid #D9C2A6"}}><QrCode size={32} color="#6F4E37"/><span style={{fontWeight:800,color:"#4A2C2A"}}>QRIS</span><span style={{fontSize:10,color:"#888",fontWeight:400}}>Bisa dibatalkan</span></button>
                 <button onClick={()=>{setCashInput("");setPayModal("cash");}} style={{...S.btn("secondary"),padding:18,display:"flex",flexDirection:"column",alignItems:"center",gap:8,borderRadius:14,border:"2px solid #D9C2A6"}}><Banknote size={32} color="#6F4E37"/><span style={{fontWeight:800,color:"#4A2C2A"}}>Tunai</span><span style={{fontSize:10,color:"#888",fontWeight:400}}>Bisa dibatalkan</span></button>
               </div>
             </>}
