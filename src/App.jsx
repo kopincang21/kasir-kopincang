@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
-import { ShoppingCart, Package, Coffee, BarChart2, Plus, Trash2, Edit2, X, Check, Minus, AlertCircle, QrCode, Banknote, ArrowLeft, TrendingUp, Receipt, Settings, Warehouse, BookOpen, TrendingDown, AlertTriangle, LogOut, User, Lock, XCircle, Printer, Download, Wifi, WifiOff } from "lucide-react";
+import { ShoppingCart, Package, Coffee, BarChart2, Plus, Trash2, Edit2, X, Check, Minus, AlertCircle, QrCode, Banknote, ArrowLeft, TrendingUp, Receipt, Settings, Warehouse, BookOpen, TrendingDown, AlertTriangle, LogOut, User, Lock, XCircle, Printer, Download, Wifi, WifiOff, Gift, ShoppingBag } from "lucide-react";
 import { initializeApp } from "firebase/app";
 import { getFirestore, collection, doc, setDoc, deleteDoc, updateDoc, onSnapshot } from "firebase/firestore";
 
@@ -143,6 +143,7 @@ function MainApp({currentUser,onLogout,users,onCurrentUserUpdate}){
   const [editUserForm,setEditUserForm]=useState({id:"",username:"",password:"",nama:"",role:"kasir"});
   const [receiptModal,setReceiptModal]=useState(null);
   const [labaBreakdownModal,setLabaBreakdownModal]=useState(false);
+  const [riwayatModal,setRiwayatModal]=useState(false);
   const [btDevice,setBtDevice]=useState(null);
   const [btChar,setBtChar]=useState(null);
   const [btStatus,setBtStatus]=useState("disconnected"); // disconnected | connecting | connected | error
@@ -188,8 +189,11 @@ function MainApp({currentUser,onLogout,users,onCurrentUserUpdate}){
   }
   const filteredTrx=filterByPeriod(aktivTrx);
   const filteredKas=filterByPeriod(kas,"tanggal");
-  const totalPenjualan=filteredTrx.reduce((s,t)=>s+t.total,0);
-  const totalLabaKotor=filteredTrx.reduce((s,t)=>s+t.laba,0);
+  const filteredTrxJual=filteredTrx.filter(t=>t.metode!=="Compliment");
+  const filteredTrxCompliment=filteredTrx.filter(t=>t.metode==="Compliment");
+  const totalPenjualan=filteredTrxJual.reduce((s,t)=>s+t.total,0);
+  const totalLabaKotor=filteredTrxJual.reduce((s,t)=>s+t.laba,0);
+  const totalNilaiCompliment=filteredTrxCompliment.reduce((s,t)=>s+t.total,0);
   const totalPemasukan=filteredKas.filter(k=>k.jenis==="pemasukan").reduce((s,k)=>s+k.jumlah,0);
   const totalPengeluaran=filteredKas.filter(k=>k.jenis==="pengeluaran").reduce((s,k)=>s+k.jumlah,0);
   const labaBersih=totalPenjualan+totalPemasukan-totalPengeluaran;
@@ -507,7 +511,10 @@ function MainApp({currentUser,onLogout,users,onCurrentUserUpdate}){
                       <div style={{display:"flex",alignItems:"center",gap:8}}>
                         <div style={{textAlign:"right"}}>
                           <div style={{fontSize:13,fontWeight:800,color:"#4A2C2A"}}>{rp(t.total)}</div>
-                          <span style={{background:t.metode==="QRIS"?"#6F4E3722":"#4A2C2A22",color:t.metode==="QRIS"?"#6F4E37":"#4A2C2A",fontSize:10,fontWeight:700,padding:"1px 6px",borderRadius:99}}>{t.metode}</span>
+                          <span style={{
+  background: t.metode==="QRIS"?"#6F4E3722":t.metode==="Compliment"?"#8B5E3C22":t.metode==="ShopeeFood"?"#EE4D2D22":t.metode==="GrabFood"?"#00B14F22":t.metode==="GoFood"?"#00AA1322":"#4A2C2A22",
+  color: t.metode==="QRIS"?"#6F4E37":t.metode==="Compliment"?"#8B5E3C":t.metode==="ShopeeFood"?"#EE4D2D":t.metode==="GrabFood"?"#00B14F":t.metode==="GoFood"?"#00AA13":"#4A2C2A",
+  fontSize:10,fontWeight:700,padding:"1px 6px",borderRadius:99}}>{t.metode}</span>
                         </div>
                         <button onClick={()=>printReceipt(t)} style={{...S.btn("secondary"),padding:"5px 7px"}} title="Cetak (dialog print)"><Printer size={13}/></button>
                         {btStatus==="connected"&&<button onClick={()=>printViaBluetooth(t)} style={{...S.btn("green"),padding:"5px 7px"}} title="Cetak via printer Bluetooth">BT</button>}
@@ -639,11 +646,13 @@ function MainApp({currentUser,onLogout,users,onCurrentUserUpdate}){
                 {label:"Laba Kotor",value:rp(totalLabaKotor),color:"#8B5E3C"},
                 {label:"Pengeluaran Kas",value:rp(totalPengeluaran),color:"#dc2626"},
                 {label:"Laba Bersih",value:rp(labaBersih),color:labaBersih>=0?"#15803d":"#dc2626"},
-                {label:"Transaksi",value:filteredTrx.length+" nota",color:"#6F4E37"},
+                {label:"Transaksi",value:filteredTrxJual.length+" nota",color:"#6F4E37"},
                 {label:"Margin Laba",value:marginPeriod.toFixed(1)+"%",color:marginPeriod>=targetMargin?"#15803d":"#d97706"},
+                {label:"Nilai Compliment",value:rp(totalNilaiCompliment)+" ("+filteredTrxCompliment.length+"x)",color:"#8B5E3C"},
               ].map(s=>{
-                const clickable=s.label==="Laba Bersih";
-                return(<div key={s.label} onClick={clickable?()=>setLabaBreakdownModal(true):undefined}
+                const clickable=s.label==="Laba Bersih"||s.label==="Transaksi";
+                const onClickFn = s.label==="Laba Bersih" ? ()=>setLabaBreakdownModal(true) : s.label==="Transaksi" ? ()=>setRiwayatModal(true) : undefined;
+                return(<div key={s.label} onClick={onClickFn}
                   style={{...S.card,padding:12,cursor:clickable?"pointer":"default",border:clickable?"1.5px dashed #D9C2A6":undefined,position:"relative"}}>
                   <div style={{fontSize:10,color:"#888",marginBottom:4,display:"flex",alignItems:"center",gap:4}}>{s.label}{clickable&&<AlertCircle size={10} color="#8B5E3C"/>}</div>
                   <div style={{fontSize:15,fontWeight:800,color:s.color}}>{s.value}</div>
@@ -699,10 +708,29 @@ function MainApp({currentUser,onLogout,users,onCurrentUserUpdate}){
                 <button style={{border:"none",background:"none",cursor:"pointer"}} onClick={()=>setPayModal(null)}><X size={20}/></button>
               </div>
               <div style={{textAlign:"center",marginBottom:20}}><div style={{fontSize:11,color:"#888"}}>Total</div><div style={{fontSize:28,fontWeight:900,color:"#4A2C2A"}}>{rp(cartTotal)}</div></div>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
                 <button onClick={()=>setPayModal("qris")} style={{...S.btn("secondary"),padding:18,display:"flex",flexDirection:"column",alignItems:"center",gap:8,borderRadius:14,border:"2px solid #D9C2A6"}}><QrCode size={32} color="#6F4E37"/><span style={{fontWeight:800,color:"#4A2C2A"}}>QRIS</span><span style={{fontSize:10,color:"#888",fontWeight:400}}>Bisa dibatalkan</span></button>
                 <button onClick={()=>{setCashInput("");setPayModal("cash");}} style={{...S.btn("secondary"),padding:18,display:"flex",flexDirection:"column",alignItems:"center",gap:8,borderRadius:14,border:"2px solid #D9C2A6"}}><Banknote size={32} color="#6F4E37"/><span style={{fontWeight:800,color:"#4A2C2A"}}>Tunai</span><span style={{fontSize:10,color:"#888",fontWeight:400}}>Bisa dibatalkan</span></button>
               </div>
+              <div style={{fontSize:11,fontWeight:700,color:"#8B5E3C",marginBottom:8}}>Pesanan Online</div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:10}}>
+                <button onClick={()=>checkout("ShopeeFood")} style={{...S.btn("secondary"),padding:12,display:"flex",flexDirection:"column",alignItems:"center",gap:5,borderRadius:12,border:"2px solid #FEE2C4"}}>
+                  <ShoppingBag size={22} color="#EE4D2D"/><span style={{fontWeight:700,color:"#4A2C2A",fontSize:11}}>ShopeeFood</span>
+                </button>
+                <button onClick={()=>checkout("GrabFood")} style={{...S.btn("secondary"),padding:12,display:"flex",flexDirection:"column",alignItems:"center",gap:5,borderRadius:12,border:"2px solid #D4EFD9"}}>
+                  <ShoppingBag size={22} color="#00B14F"/><span style={{fontWeight:700,color:"#4A2C2A",fontSize:11}}>GrabFood</span>
+                </button>
+                <button onClick={()=>checkout("GoFood")} style={{...S.btn("secondary"),padding:12,display:"flex",flexDirection:"column",alignItems:"center",gap:5,borderRadius:12,border:"2px solid #CDEFE8"}}>
+                  <ShoppingBag size={22} color="#00AA13"/><span style={{fontWeight:700,color:"#4A2C2A",fontSize:11}}>GoFood</span>
+                </button>
+              </div>
+              <button onClick={()=>checkout("Compliment")} style={{...S.btn("secondary"),width:"100%",padding:14,display:"flex",alignItems:"center",justifyContent:"center",gap:10,borderRadius:14,border:"2px dashed #D9C2A6"}}>
+                <Gift size={22} color="#8B5E3C"/>
+                <div style={{textAlign:"left"}}>
+                  <div style={{fontWeight:800,color:"#4A2C2A",fontSize:13}}>Compliment / Pemakaian Sendiri</div>
+                  <div style={{fontSize:10,color:"#888"}}>Gratis, tidak dihitung sebagai penjualan — stok tetap terpotong</div>
+                </div>
+              </button>
             </>}
             {payModal==="qris"&&<>
               <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14}}>
@@ -893,6 +921,46 @@ function MainApp({currentUser,onLogout,users,onCurrentUserUpdate}){
           </button>
         </div>
       </div>}
+      {/* RIWAYAT PEMESANAN MODAL */}
+      {riwayatModal&&<div style={S.overlay} onClick={()=>setRiwayatModal(false)}>
+        <div style={{...S.sheet,maxHeight:"85vh"}} onClick={e=>e.stopPropagation()}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+            <div style={{fontSize:15,fontWeight:800,color:"#4A2C2A"}}>Riwayat Pemesanan</div>
+            <button style={{border:"none",background:"none",cursor:"pointer"}} onClick={()=>setRiwayatModal(false)}><X size={20}/></button>
+          </div>
+          <div style={{fontSize:11,color:"#888",marginBottom:14}}>Periode: <b style={{color:"#6F4E37"}}>{laporanPeriod}</b> · {filteredTrx.length} pesanan</div>
+
+          {filteredTrx.length===0&&<div style={{textAlign:"center",padding:30,color:"#bbb"}}><Receipt size={36} style={{opacity:0.3,marginBottom:8}}/><div style={{fontSize:13}}>Belum ada pesanan di periode ini</div></div>}
+
+          {filteredTrx.map(t=>(
+            <div key={t.id} style={{...S.card,padding:12,opacity:t.cancelled?0.5:1,borderLeft:`3px solid ${t.cancelled?"#dc2626":"#6F4E37"}`}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}}>
+                <div>
+                  <div style={{fontSize:12,fontWeight:700,color:t.cancelled?"#dc2626":"#4A2C2A"}}>
+                    {t.cancelled?"❌ DIBATALKAN · ":""}{new Date(t.waktu).toLocaleString("id-ID",{dateStyle:"medium",timeStyle:"short"})}
+                  </div>
+                  {t.kasir&&<div style={{fontSize:10,color:"#aaa"}}>Kasir: {t.kasir}</div>}
+                </div>
+                <span style={{
+                  background: t.metode==="QRIS"?"#6F4E3722":t.metode==="Compliment"?"#8B5E3C22":t.metode==="ShopeeFood"?"#EE4D2D22":t.metode==="GrabFood"?"#00B14F22":t.metode==="GoFood"?"#00AA1322":"#4A2C2A22",
+                  color: t.metode==="QRIS"?"#6F4E37":t.metode==="Compliment"?"#8B5E3C":t.metode==="ShopeeFood"?"#EE4D2D":t.metode==="GrabFood"?"#00B14F":t.metode==="GoFood"?"#00AA13":"#4A2C2A",
+                  fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:99}}>{t.metode}</span>
+              </div>
+              {t.items.map((item,idx)=>(
+                <div key={idx} style={{display:"flex",justifyContent:"space-between",fontSize:12,color:"#555",marginBottom:2}}>
+                  <span>{item.nama} × {item.qty}</span>
+                  <span>{rp(item.hargaJual*item.qty)}</span>
+                </div>
+              ))}
+              <div style={{borderTop:"1px dashed #f0e6d8",marginTop:6,paddingTop:6,display:"flex",justifyContent:"space-between"}}>
+                <span style={{fontSize:12,fontWeight:700,color:"#4A2C2A"}}>Total</span>
+                <span style={{fontSize:13,fontWeight:800,color:"#4A2C2A"}}>{rp(t.total)}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>}
+
       {/* LABA BERSIH BREAKDOWN MODAL */}
       {labaBreakdownModal&&<div style={S.overlay} onClick={()=>setLabaBreakdownModal(false)}>
         <div style={S.sheet} onClick={e=>e.stopPropagation()}>
@@ -908,7 +976,7 @@ function MainApp({currentUser,onLogout,users,onCurrentUserUpdate}){
               <span style={{fontSize:13,fontWeight:700,color:"#8B5E3C"}}>+ {rp(totalPenjualan)}</span>
             </div>
             <div style={{fontSize:10,color:"#aaa",paddingBottom:6,borderBottom:"1px dashed #f0e6d8"}}>
-              Total omzet dari {filteredTrx.length} transaksi yang tidak dibatalkan
+              Total omzet dari {filteredTrxJual.length} transaksi yang tidak dibatalkan (di luar Compliment)
             </div>
 
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 0 6px"}}>
