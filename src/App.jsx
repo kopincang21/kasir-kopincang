@@ -176,8 +176,12 @@ function MainApp({currentUser,onLogout,users,onCurrentUserUpdate}){
 
   const cartTotal=cart.reduce((s,i)=>s+i.hargaJual*i.qty,0);
   const cartHPP=cart.reduce((s,i)=>s+i.hpp*i.qty,0);
-  const [diskon,setDiskon]=useState(0);
-  const [biayaAdmin,setBiayaAdmin]=useState(0);
+  const [diskonMode,setDiskonMode]=useState("rp"); // "rp" | "persen"
+  const [diskonInput,setDiskonInput]=useState(0);
+  const [adminMode,setAdminMode]=useState("rp"); // "rp" | "persen"
+  const [adminInput,setAdminInput]=useState(0);
+  const diskon = diskonMode==="persen" ? Math.round(cartTotal*(diskonInput/100)) : diskonInput;
+  const biayaAdmin = adminMode==="persen" ? Math.round(cartTotal*(adminInput/100)) : adminInput;
   const netTotal=Math.max(0,cartTotal-diskon-biayaAdmin);
   const cartLaba=netTotal-cartHPP;
   const now=new Date();
@@ -258,7 +262,7 @@ function MainApp({currentUser,onLogout,users,onCurrentUserUpdate}){
     deductStock(cart);
     const newId=uid();
     writeDoc("kopincang_transaksi", newId, {id:newId,waktu:new Date().toISOString(),items:[...cart],total:netTotal,grossTotal:cartTotal,diskon,biayaAdmin,laba:cartLaba,metode,cancelled:false,kasir:currentUser.nama});
-    setCart([]);setDiskon(0);setBiayaAdmin(0);setPayModal("done");
+    setCart([]);setDiskonInput(0);setAdminInput(0);setPayModal("done");
   }
   function cancelOrder(trxId){
     const trx=transaksi.find(t=>t.id===trxId);if(!trx||trx.cancelled)return;
@@ -720,12 +724,26 @@ function MainApp({currentUser,onLogout,users,onCurrentUserUpdate}){
 
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
                 <div>
-                  <label style={S.label}>Diskon (Rp)</label>
-                  <input style={S.input} type="number" value={diskon||""} onChange={e=>setDiskon(Number(e.target.value)||0)} placeholder="0"/>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:3}}>
+                    <label style={{...S.label,marginBottom:0}}>Diskon</label>
+                    <div style={{display:"flex",borderRadius:6,overflow:"hidden",border:"1px solid #e0d0c0"}}>
+                      <button type="button" onClick={()=>setDiskonMode("rp")} style={{border:"none",padding:"2px 8px",fontSize:10,fontWeight:700,cursor:"pointer",background:diskonMode==="rp"?"#6F4E37":"#fff",color:diskonMode==="rp"?"#fff":"#6F4E37"}}>Rp</button>
+                      <button type="button" onClick={()=>setDiskonMode("persen")} style={{border:"none",padding:"2px 8px",fontSize:10,fontWeight:700,cursor:"pointer",background:diskonMode==="persen"?"#6F4E37":"#fff",color:diskonMode==="persen"?"#fff":"#6F4E37"}}>%</button>
+                    </div>
+                  </div>
+                  <input style={S.input} type="number" value={diskonInput||""} onChange={e=>setDiskonInput(Number(e.target.value)||0)} placeholder="0"/>
+                  {diskonMode==="persen"&&diskonInput>0&&<div style={{fontSize:10,color:"#aaa",marginTop:2}}>= {rp(diskon)}</div>}
                 </div>
                 <div>
-                  <label style={S.label}>Biaya Admin (Rp)</label>
-                  <input style={S.input} type="number" value={biayaAdmin||""} onChange={e=>setBiayaAdmin(Number(e.target.value)||0)} placeholder="0"/>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:3}}>
+                    <label style={{...S.label,marginBottom:0}}>Biaya Admin</label>
+                    <div style={{display:"flex",borderRadius:6,overflow:"hidden",border:"1px solid #e0d0c0"}}>
+                      <button type="button" onClick={()=>setAdminMode("rp")} style={{border:"none",padding:"2px 8px",fontSize:10,fontWeight:700,cursor:"pointer",background:adminMode==="rp"?"#6F4E37":"#fff",color:adminMode==="rp"?"#fff":"#6F4E37"}}>Rp</button>
+                      <button type="button" onClick={()=>setAdminMode("persen")} style={{border:"none",padding:"2px 8px",fontSize:10,fontWeight:700,cursor:"pointer",background:adminMode==="persen"?"#6F4E37":"#fff",color:adminMode==="persen"?"#fff":"#6F4E37"}}>%</button>
+                    </div>
+                  </div>
+                  <input style={S.input} type="number" value={adminInput||""} onChange={e=>setAdminInput(Number(e.target.value)||0)} placeholder="0"/>
+                  {adminMode==="persen"&&adminInput>0&&<div style={{fontSize:10,color:"#aaa",marginTop:2}}>= {rp(biayaAdmin)}</div>}
                 </div>
               </div>
               {(diskon>0||biayaAdmin>0)&&(
