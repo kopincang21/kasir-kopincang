@@ -45,7 +45,7 @@ async function removeDoc(name, id){
 
 const INIT_USERS = [
   { id: "u1", username: "admin", password: "kopincang123", role: "superadmin", nama: "Super Admin" },
-  { id: "u2", username: "kasir", password: "kasir123", role: "kasir", nama: "Kasir" },
+  { id: "u2", username: "kasir", password: "kasir123", role: "kasir", nama: "Kasir", permissions: ["stok"] },
 ];
 const INIT_BAHAN = [
   { id:"b1", nama:"Kopi Robusta", satuan:"gram", harga:150, stok:500, minStok:100 },
@@ -140,7 +140,7 @@ function MainApp({currentUser,onLogout,users,onCurrentUserUpdate}){
   const [editBahan,setEditBahan]=useState({id:"",nama:"",satuan:"ml",harga:0,stok:0,minStok:0});
   const [editKas,setEditKas]=useState({id:"",jenis:"pengeluaran",kategori:"Operasional",keterangan:"",jumlah:0,tanggal:new Date().toISOString().split("T")[0]});
   const [editUserModal,setEditUserModal]=useState(null);
-  const [editUserForm,setEditUserForm]=useState({id:"",username:"",password:"",nama:"",role:"kasir"});
+  const [editUserForm,setEditUserForm]=useState({id:"",username:"",password:"",nama:"",role:"kasir",permissions:["stok"]});
   const [receiptModal,setReceiptModal]=useState(null);
   const [labaBreakdownModal,setLabaBreakdownModal]=useState(false);
   const [riwayatModal,setRiwayatModal]=useState(false);
@@ -175,7 +175,11 @@ function MainApp({currentUser,onLogout,users,onCurrentUserUpdate}){
   },[]);
 
   const cartTotal=cart.reduce((s,i)=>s+i.hargaJual*i.qty,0);
-  const cartLaba=cart.reduce((s,i)=>s+(i.hargaJual-i.hpp)*i.qty,0);
+  const cartHPP=cart.reduce((s,i)=>s+i.hpp*i.qty,0);
+  const [diskon,setDiskon]=useState(0);
+  const [biayaAdmin,setBiayaAdmin]=useState(0);
+  const netTotal=Math.max(0,cartTotal-diskon-biayaAdmin);
+  const cartLaba=netTotal-cartHPP;
   const now=new Date();
   const aktivTrx=transaksi.filter(t=>!t.cancelled);
 
@@ -253,8 +257,8 @@ function MainApp({currentUser,onLogout,users,onCurrentUserUpdate}){
   function checkout(metode){
     deductStock(cart);
     const newId=uid();
-    writeDoc("kopincang_transaksi", newId, {id:newId,waktu:new Date().toISOString(),items:[...cart],total:cartTotal,laba:cartLaba,metode,cancelled:false,kasir:currentUser.nama});
-    setCart([]);setPayModal("done");
+    writeDoc("kopincang_transaksi", newId, {id:newId,waktu:new Date().toISOString(),items:[...cart],total:netTotal,grossTotal:cartTotal,diskon,biayaAdmin,laba:cartLaba,metode,cancelled:false,kasir:currentUser.nama});
+    setCart([]);setDiskon(0);setBiayaAdmin(0);setPayModal("done");
   }
   function cancelOrder(trxId){
     const trx=transaksi.find(t=>t.id===trxId);if(!trx||trx.cancelled)return;
@@ -422,9 +426,14 @@ function MainApp({currentUser,onLogout,users,onCurrentUserUpdate}){
     sheet:{background:"#fff",borderRadius:"20px 20px 0 0",padding:20,width:"100%",maxWidth:960,maxHeight:"92vh",overflowY:"auto"},
   };
 
-  const adminTabs=[{id:"kasir",label:"Kasir",icon:<ShoppingCart size={16}/>},{id:"produk",label:"Produk",icon:<Package size={16}/>},{id:"stok",label:"Stok",icon:<Warehouse size={16}/>},{id:"kas",label:"Kas",icon:<BookOpen size={16}/>},{id:"laporan",label:"Laporan",icon:<BarChart2 size={16}/>}];
-  const kasirTabs=[{id:"kasir",label:"Kasir",icon:<ShoppingCart size={16}/>},{id:"stok",label:"Stok",icon:<Warehouse size={16}/>}];
-  const tabs=isAdmin?adminTabs:kasirTabs;
+  const allTabs=[{id:"kasir",label:"Kasir",icon:<ShoppingCart size={16}/>},{id:"produk",label:"Produk",icon:<Package size={16}/>},{id:"stok",label:"Stok",icon:<Warehouse size={16}/>},{id:"kas",label:"Kas",icon:<BookOpen size={16}/>},{id:"laporan",label:"Laporan",icon:<BarChart2 size={16}/>}];
+  function hasAccess(menuId){
+    if(isAdmin) return true;
+    const perms = currentUser.permissions || ["kasir","stok"];
+    return perms.includes(menuId);
+  }
+  const tabs=allTabs.filter(t=>hasAccess(t.id));
+  useEffect(()=>{ if(!hasAccess(tab)) setTab("kasir"); },[tab,currentUser.id]);
 
   const todayTrx=transaksi.filter(t=>new Date(t.waktu).toDateString()===now.toDateString());
 
@@ -530,7 +539,7 @@ function MainApp({currentUser,onLogout,users,onCurrentUserUpdate}){
         )}
 
         {/* PRODUK */}
-        {tab==="produk"&&isAdmin&&(
+        {tab==="produk"&&hasAccess("produk")&&(
           <div>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
               <div style={{fontSize:15,fontWeight:700,color:"#4A2C2A"}}>Daftar Produk <span style={{fontSize:12,color:"#888",fontWeight:400}}>({produkList.length})</span></div>
@@ -600,7 +609,7 @@ function MainApp({currentUser,onLogout,users,onCurrentUserUpdate}){
         )}
 
         {/* KAS */}
-        {tab==="kas"&&isAdmin&&(
+        {tab==="kas"&&hasAccess("kas")&&(
           <div>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
               <div style={{fontSize:15,fontWeight:700,color:"#4A2C2A"}}>Buku Kas</div>
@@ -628,7 +637,7 @@ function MainApp({currentUser,onLogout,users,onCurrentUserUpdate}){
         )}
 
         {/* LAPORAN */}
-        {tab==="laporan"&&isAdmin&&(
+        {tab==="laporan"&&hasAccess("laporan")&&(
           <div>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10,flexWrap:"wrap",gap:8}}>
               <div style={{fontSize:15,fontWeight:700,color:"#4A2C2A"}}>Laporan Keuangan</div>
@@ -707,7 +716,27 @@ function MainApp({currentUser,onLogout,users,onCurrentUserUpdate}){
                 <div style={{fontSize:15,fontWeight:800,color:"#4A2C2A"}}>Pilih Pembayaran</div>
                 <button style={{border:"none",background:"none",cursor:"pointer"}} onClick={()=>setPayModal(null)}><X size={20}/></button>
               </div>
-              <div style={{textAlign:"center",marginBottom:20}}><div style={{fontSize:11,color:"#888"}}>Total</div><div style={{fontSize:28,fontWeight:900,color:"#4A2C2A"}}>{rp(cartTotal)}</div></div>
+              <div style={{textAlign:"center",marginBottom:14}}><div style={{fontSize:11,color:"#888"}}>Subtotal</div><div style={{fontSize:22,fontWeight:800,color:"#8B5E3C"}}>{rp(cartTotal)}</div></div>
+
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
+                <div>
+                  <label style={S.label}>Diskon (Rp)</label>
+                  <input style={S.input} type="number" value={diskon||""} onChange={e=>setDiskon(Number(e.target.value)||0)} placeholder="0"/>
+                </div>
+                <div>
+                  <label style={S.label}>Biaya Admin (Rp)</label>
+                  <input style={S.input} type="number" value={biayaAdmin||""} onChange={e=>setBiayaAdmin(Number(e.target.value)||0)} placeholder="0"/>
+                </div>
+              </div>
+              {(diskon>0||biayaAdmin>0)&&(
+                <div style={{fontSize:10,color:"#aaa",marginBottom:6,textAlign:"right"}}>
+                  Dipakai buat potongan promo/diskon toko atau potongan platform (ShopeeFood/GrabFood/GoFood dll)
+                </div>
+              )}
+              <div style={{textAlign:"center",marginBottom:16,background:"#FBF3E7",borderRadius:10,padding:"10px 0"}}>
+                <div style={{fontSize:11,color:"#8B5E3C"}}>Total Diterima</div>
+                <div style={{fontSize:26,fontWeight:900,color:"#4A2C2A"}}>{rp(netTotal)}</div>
+              </div>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
                 <button onClick={()=>setPayModal("qris")} style={{...S.btn("secondary"),padding:18,display:"flex",flexDirection:"column",alignItems:"center",gap:8,borderRadius:14,border:"2px solid #D9C2A6"}}><QrCode size={32} color="#6F4E37"/><span style={{fontWeight:800,color:"#4A2C2A"}}>QRIS</span><span style={{fontSize:10,color:"#888",fontWeight:400}}>Bisa dibatalkan</span></button>
                 <button onClick={()=>{setCashInput("");setPayModal("cash");}} style={{...S.btn("secondary"),padding:18,display:"flex",flexDirection:"column",alignItems:"center",gap:8,borderRadius:14,border:"2px solid #D9C2A6"}}><Banknote size={32} color="#6F4E37"/><span style={{fontWeight:800,color:"#4A2C2A"}}>Tunai</span><span style={{fontSize:10,color:"#888",fontWeight:400}}>Bisa dibatalkan</span></button>
@@ -745,7 +774,8 @@ function MainApp({currentUser,onLogout,users,onCurrentUserUpdate}){
                 </div>
                 <div style={{background:"#FBF3E7",borderRadius:12,padding:"10px 24px",textAlign:"center",width:"100%",boxSizing:"border-box"}}>
                   <div style={{fontSize:11,color:"#8B5E3C"}}>Total Pembayaran</div>
-                  <div style={{fontSize:24,fontWeight:900,color:"#4A2C2A"}}>{rp(cartTotal)}</div>
+                  <div style={{fontSize:24,fontWeight:900,color:"#4A2C2A"}}>{rp(netTotal)}</div>
+                  {(diskon>0||biayaAdmin>0)&&<div style={{fontSize:10,color:"#aaa",marginTop:2}}>Subtotal {rp(cartTotal)} {diskon>0&&`- Diskon ${rp(diskon)}`} {biayaAdmin>0&&`- Admin ${rp(biayaAdmin)}`}</div>}
                 </div>
                 <button style={{...S.btn("primary"),width:"100%",padding:13}} onClick={()=>checkout("QRIS")}><Check size={15} style={{verticalAlign:"middle",marginRight:5}}/>Konfirmasi Diterima</button>
               </div>
@@ -755,15 +785,19 @@ function MainApp({currentUser,onLogout,users,onCurrentUserUpdate}){
                 <button style={{border:"none",background:"none",cursor:"pointer"}} onClick={()=>setPayModal("pilih")}><ArrowLeft size={20}/></button>
                 <div style={{fontSize:15,fontWeight:800,color:"#4A2C2A"}}>Bayar Tunai</div>
               </div>
-              <div style={{textAlign:"center",marginBottom:16}}><div style={{fontSize:11,color:"#888"}}>Total</div><div style={{fontSize:28,fontWeight:900,color:"#4A2C2A"}}>{rp(cartTotal)}</div></div>
+              <div style={{textAlign:"center",marginBottom:16}}>
+                <div style={{fontSize:11,color:"#888"}}>Total yang harus dibayar</div>
+                <div style={{fontSize:28,fontWeight:900,color:"#4A2C2A"}}>{rp(netTotal)}</div>
+                {(diskon>0||biayaAdmin>0)&&<div style={{fontSize:10,color:"#aaa",marginTop:2}}>Subtotal {rp(cartTotal)} {diskon>0&&`- Diskon ${rp(diskon)}`} {biayaAdmin>0&&`- Admin ${rp(biayaAdmin)}`}</div>}
+              </div>
               <div style={{marginBottom:14}}>
                 <label style={S.label}>Uang diterima</label>
                 <input style={S.input} type="number" placeholder="0" value={cashInput} onChange={e=>setCashInput(e.target.value)} autoFocus/>
-                {Number(cashInput)>0&&<div style={{marginTop:10,padding:"12px 14px",borderRadius:10,background:Number(cashInput)>=cartTotal?"#dcfce7":"#fee2e2"}}>
-                  {Number(cashInput)>=cartTotal?<><div style={{fontSize:11,color:"#15803d"}}>Kembalian</div><div style={{fontSize:24,fontWeight:800,color:"#15803d"}}>{rp(Number(cashInput)-cartTotal)}</div></>:<div style={{fontSize:12,color:"#dc2626",fontWeight:600}}>Kurang {rp(cartTotal-Number(cashInput))}</div>}
+                {Number(cashInput)>0&&<div style={{marginTop:10,padding:"12px 14px",borderRadius:10,background:Number(cashInput)>=netTotal?"#dcfce7":"#fee2e2"}}>
+                  {Number(cashInput)>=netTotal?<><div style={{fontSize:11,color:"#15803d"}}>Kembalian</div><div style={{fontSize:24,fontWeight:800,color:"#15803d"}}>{rp(Number(cashInput)-netTotal)}</div></>:<div style={{fontSize:12,color:"#dc2626",fontWeight:600}}>Kurang {rp(netTotal-Number(cashInput))}</div>}
                 </div>}
               </div>
-              <button disabled={Number(cashInput)<cartTotal} style={{...S.btn("primary"),width:"100%",padding:13,opacity:Number(cashInput)<cartTotal?0.4:1}} onClick={()=>checkout("Tunai")}><Check size={15} style={{verticalAlign:"middle",marginRight:5}}/>Selesaikan</button>
+              <button disabled={Number(cashInput)<netTotal} style={{...S.btn("primary"),width:"100%",padding:13,opacity:Number(cashInput)<netTotal?0.4:1}} onClick={()=>checkout("Tunai")}><Check size={15} style={{verticalAlign:"middle",marginRight:5}}/>Selesaikan</button>
             </>}
           </div>
         </div>
@@ -828,7 +862,7 @@ function MainApp({currentUser,onLogout,users,onCurrentUserUpdate}){
                 <button style={{...S.btn("secondary"),padding:"5px 8px"}} onClick={()=>{setEditUserForm({...u});setEditUserModal("edit");}}><Edit2 size={12}/></button>
               </div>
             </div>)}
-            <button style={{...S.btn("primary"),width:"100%",marginTop:6}} onClick={()=>{setEditUserForm({id:uid(),username:"",password:"",nama:"",role:"kasir"});setEditUserModal("add");}}>
+            <button style={{...S.btn("primary"),width:"100%",marginTop:6}} onClick={()=>{setEditUserForm({id:uid(),username:"",password:"",nama:"",role:"kasir",permissions:["stok"]});setEditUserModal("add");}}>
               <Plus size={13} style={{verticalAlign:"middle",marginRight:3}}/>Tambah Akun
             </button>
           </div>
@@ -1032,6 +1066,36 @@ function MainApp({currentUser,onLogout,users,onCurrentUserUpdate}){
               <button onClick={()=>setEditUserForm(f=>({...f,role:"kasir"}))} style={{border:`2px solid ${editUserForm.role==="kasir"?"#15803d":"#e0d0c0"}`,borderRadius:10,padding:10,cursor:"pointer",background:editUserForm.role==="kasir"?"#dcfce7":"#fff",fontWeight:700,fontSize:12,color:"#15803d"}}>Kasir</button>
             </div>
           </div>
+          {editUserForm.role==="kasir"&&(
+            <div style={{marginBottom:16}}>
+              <label style={S.label}>Menu yang Boleh Diakses</label>
+              <div style={{...S.card,padding:10,marginBottom:0}}>
+                <label style={{display:"flex",alignItems:"center",gap:8,padding:"5px 0",opacity:0.6}}>
+                  <input type="checkbox" checked disabled/>
+                  <span style={{fontSize:12,color:"#2d1a0e"}}>Kasir <i style={{color:"#aaa"}}>(wajib)</i></span>
+                </label>
+                {[
+                  {id:"produk",label:"Produk (bisa lihat HPP)"},
+                  {id:"stok",label:"Stok Bahan Baku"},
+                  {id:"kas",label:"Buku Kas"},
+                  {id:"laporan",label:"Laporan Keuangan"},
+                ].map(m=>{
+                  const perms = editUserForm.permissions || ["stok"];
+                  const checked = perms.includes(m.id);
+                  return (
+                    <label key={m.id} style={{display:"flex",alignItems:"center",gap:8,padding:"5px 0",cursor:"pointer"}}>
+                      <input type="checkbox" checked={checked} onChange={()=>{
+                        const next = checked ? perms.filter(p=>p!==m.id) : [...perms, m.id];
+                        setEditUserForm(f=>({...f,permissions:next}));
+                      }}/>
+                      <span style={{fontSize:12,color:"#2d1a0e"}}>{m.label}</span>
+                    </label>
+                  );
+                })}
+              </div>
+              <div style={{fontSize:10,color:"#aaa",marginTop:6}}>Menu Produk menampilkan HPP &amp; margin — centang cuma kalau user ini boleh tahu harga modal.</div>
+            </div>
+          )}
           <div style={{display:"flex",gap:8}}>
             {editUserModal==="edit"&&users.length>1&&(
               <button style={{...S.btn("danger"),padding:13}} onClick={()=>{removeDoc("kopincang_users",editUserForm.id);setEditUserModal(null);}}><Trash2 size={15}/></button>
