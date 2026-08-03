@@ -205,6 +205,8 @@ function MainApp({currentUser,onLogout,users,onCurrentUserUpdate,ownerEmail}){
   const [monthDetailModal,setMonthDetailModal]=useState(null);
   const [cancelReasonInput,setCancelReasonInput]=useState("");
   const [restockModal,setRestockModal]=useState(false);
+  const [kasFilterDate,setKasFilterDate]=useState(new Date().toISOString().split("T")[0]);
+  const [kasViewAll,setKasViewAll]=useState(false);
   const [restockForm,setRestockForm]=useState({bahanId:"",qty:0,totalHarga:0});
   const [customProduk,setCustomProduk]=useState(null);
   const [customSelectedAddons,setCustomSelectedAddons]=useState([]);
@@ -774,33 +776,54 @@ function MainApp({currentUser,onLogout,users,onCurrentUserUpdate,ownerEmail}){
         )}
 
         {/* KAS */}
-        {tab==="kas"&&hasAccess("kas")&&(
+        {tab==="kas"&&hasAccess("kas")&&(()=>{
+          const today = new Date().toISOString().split("T")[0];
+          const effectiveDate = isAdmin ? kasFilterDate : today;
+          const effectiveViewAll = isAdmin && kasViewAll;
+
+          const kasScoped = effectiveViewAll ? kas : kas.filter(k=>k.tanggal===effectiveDate);
+          const trxScoped = effectiveViewAll
+            ? aktivTrx.filter(t=>t.metode!=="Compliment")
+            : aktivTrx.filter(t=>t.metode!=="Compliment" && new Date(t.waktu).toISOString().split("T")[0]===effectiveDate);
+
+          const kasManualPemasukan = kasScoped.filter(k=>k.jenis==="pemasukan").reduce((s,k)=>s+k.jumlah,0);
+          const kasPengeluaran = kasScoped.filter(k=>k.jenis==="pengeluaran").reduce((s,k)=>s+k.jumlah,0);
+          const penjualanScoped = trxScoped.reduce((s,t)=>s+t.total,0);
+          const totalPemasukanGabungan = kasManualPemasukan + penjualanScoped;
+
+          return(
           <div>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
               <div style={{fontSize:15,fontWeight:700,color:"#4A2C2A"}}>Buku Kas</div>
               <button style={S.btn("primary")} onClick={()=>{setEditKas({id:uid(),jenis:"pengeluaran",kategori:"Operasional",keterangan:"",jumlah:0,tanggal:new Date().toISOString().split("T")[0]});setKasModal(true);}}>
                 <Plus size={13} style={{verticalAlign:"middle",marginRight:3}}/>Catat
               </button>
             </div>
-            {(()=>{
-              const kasManualPemasukan = kas.filter(k=>k.jenis==="pemasukan").reduce((s,k)=>s+k.jumlah,0);
-              const kasPengeluaran = kas.filter(k=>k.jenis==="pengeluaran").reduce((s,k)=>s+k.jumlah,0);
-              const penjualanAllTime = aktivTrx.filter(t=>t.metode!=="Compliment").reduce((s,t)=>s+t.total,0);
-              const totalPemasukanGabungan = kasManualPemasukan + penjualanAllTime;
-              return(<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:14}}>
-                <div style={{...S.card,background:"#dcfce7",padding:12}}>
-                  <div style={{fontSize:10,color:"#15803d",fontWeight:600,marginBottom:3}}>Total Pemasukan</div>
-                  <div style={{fontSize:16,fontWeight:800,color:"#15803d"}}>{rp(totalPemasukanGabungan)}</div>
-                  <div style={{fontSize:9,color:"#15803d",opacity:0.7,marginTop:2}}>Penjualan {rp(penjualanAllTime)} + Kas manual {rp(kasManualPemasukan)}</div>
-                </div>
-                <div style={{...S.card,background:"#fee2e2",padding:12}}>
-                  <div style={{fontSize:10,color:"#dc2626",fontWeight:600,marginBottom:3}}>Total Pengeluaran</div>
-                  <div style={{fontSize:16,fontWeight:800,color:"#dc2626"}}>{rp(kasPengeluaran)}</div>
-                </div>
-              </div>);
-            })()}
-            {kas.length===0&&<div style={{textAlign:"center",padding:30,color:"#bbb"}}><BookOpen size={36} style={{opacity:0.3,marginBottom:8}}/><div style={{fontSize:13}}>Belum ada catatan kas</div></div>}
-            {kas.slice().sort((a,b)=>new Date(b.tanggal)-new Date(a.tanggal)).map(k=>(
+
+            {isAdmin&&(
+              <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:14}}>
+                <input type="date" style={{...S.input,flex:1}} value={kasFilterDate} onChange={e=>{setKasFilterDate(e.target.value);setKasViewAll(false);}} disabled={kasViewAll}/>
+                <button onClick={()=>setKasViewAll(v=>!v)} style={{border:"none",borderRadius:8,padding:"9px 12px",fontSize:11,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap",background:kasViewAll?"#6F4E37":"#f0e6d8",color:kasViewAll?"#fff":"#6F4E37"}}>
+                  {kasViewAll?"✓ Semua Waktu":"Lihat Semua"}
+                </button>
+              </div>
+            )}
+            {!isAdmin&&<div style={{fontSize:11,color:"#888",marginBottom:12}}>Menampilkan data hari ini ({today})</div>}
+
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:14}}>
+              <div style={{...S.card,background:"#dcfce7",padding:12}}>
+                <div style={{fontSize:10,color:"#15803d",fontWeight:600,marginBottom:3}}>Total Pemasukan{effectiveViewAll?"":" (Hari Ini)"}</div>
+                <div style={{fontSize:16,fontWeight:800,color:"#15803d"}}>{rp(totalPemasukanGabungan)}</div>
+                <div style={{fontSize:9,color:"#15803d",opacity:0.7,marginTop:2}}>Penjualan {rp(penjualanScoped)} + Kas manual {rp(kasManualPemasukan)}</div>
+              </div>
+              <div style={{...S.card,background:"#fee2e2",padding:12}}>
+                <div style={{fontSize:10,color:"#dc2626",fontWeight:600,marginBottom:3}}>Total Pengeluaran{effectiveViewAll?"":" (Hari Ini)"}</div>
+                <div style={{fontSize:16,fontWeight:800,color:"#dc2626"}}>{rp(kasPengeluaran)}</div>
+              </div>
+            </div>
+
+            {kasScoped.length===0&&<div style={{textAlign:"center",padding:30,color:"#bbb"}}><BookOpen size={36} style={{opacity:0.3,marginBottom:8}}/><div style={{fontSize:13}}>Belum ada catatan kas{effectiveViewAll?"":" di tanggal ini"}</div></div>}
+            {kasScoped.slice().sort((a,b)=>new Date(b.tanggal)-new Date(a.tanggal)).map(k=>(
               <div key={k.id} style={{...S.card,borderLeft:`3px solid ${k.jenis==="pemasukan"?"#15803d":"#dc2626"}`}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                   <div style={{flex:1}}><div style={{fontSize:12,fontWeight:700,color:"#2d1a0e"}}>{k.keterangan}</div><div style={{fontSize:10,color:"#888"}}>{k.kategori} · {k.tanggal}</div></div>
@@ -812,7 +835,8 @@ function MainApp({currentUser,onLogout,users,onCurrentUserUpdate,ownerEmail}){
               </div>
             ))}
           </div>
-        )}
+          );
+        })()}
 
         {/* LAPORAN */}
         {tab==="laporan"&&hasAccess("laporan")&&(
