@@ -390,6 +390,7 @@ function MainApp({currentUser,onLogout,users,onCurrentUserUpdate,ownerEmail}){
         keterangan:`Beli ${restockForm.qty} ${bahan.satuan} ${bahan.nama}`,
         jumlah: Number(restockForm.totalHarga),
         tanggal: new Date().toISOString().split("T")[0],
+        dibuatOleh: currentUser.nama, dibuatOlehRole: currentUser.role,
       });
     }
     setRestockModal(false);
@@ -1693,6 +1694,15 @@ export default function App(){
     }
     return {ok:true,msg:`EmailJS belum terpasang. Password baru: ${newPass}`};
   }
+
+  useEffect(()=>{
+    // sinkronkan currentUser dengan data terbaru dari Firestore (misal role/permission diubah admin)
+    if(currentUser){
+      const fresh = users.find(u=>u.id===currentUser.id);
+      if(fresh && JSON.stringify(fresh)!==JSON.stringify(currentUser)) setCurrentUser(fresh);
+    }
+    // eslint-disable-next-line
+  },[users]);
 
   function updateCurrentUser(updated){ setCurrentUser(updated); }
   if(!currentUser) return <LoginScreen onLogin={setCurrentUser} users={users} onForgotPassword={resetUserPassword}/>;
