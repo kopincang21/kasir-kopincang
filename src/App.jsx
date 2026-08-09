@@ -174,7 +174,9 @@ function LoginScreen({onLogin,users,onForgotPassword}){
 // ─── MAIN APP ─────────────────────────────────────────────────────────────────
 function MainApp({currentUser,onLogout,users,onCurrentUserUpdate,ownerEmail}){
   const isAdmin=currentUser.role==="superadmin";
-  const isMobile=!isAdmin;
+  const isFinance=currentUser.role==="finance";
+  const isFullKasAccess=isAdmin||isFinance; // superadmin & finance: akses penuh (range tanggal + lihat semua)
+  const isMobile=!isAdmin&&!isFinance;
   const [tab,setTab]=useState("kasir");
   const [bahanList,setBahanList]=useState([]);
   const [produkList,setProdukList]=useState([]);
@@ -205,8 +207,12 @@ function MainApp({currentUser,onLogout,users,onCurrentUserUpdate,ownerEmail}){
   const [monthDetailModal,setMonthDetailModal]=useState(null);
   const [cancelReasonInput,setCancelReasonInput]=useState("");
   const [restockModal,setRestockModal]=useState(false);
-  const [kasFilterDate,setKasFilterDate]=useState(new Date().toISOString().split("T")[0]);
+  const [kasFilterDate,setKasFilterDate]=useState(new Date().toISOString().split("T")[0]); // dipakai Kasir (per hari)
+  const [kasFilterStart,setKasFilterStart]=useState(new Date().toISOString().split("T")[0]); // dipakai Superadmin/Finance (range)
+  const [kasFilterEnd,setKasFilterEnd]=useState(new Date().toISOString().split("T")[0]);
   const [kasViewAll,setKasViewAll]=useState(false);
+  const [laporanStartDate,setLaporanStartDate]=useState(new Date().toISOString().split("T")[0]);
+  const [laporanEndDate,setLaporanEndDate]=useState(new Date().toISOString().split("T")[0]);
   const [restockForm,setRestockForm]=useState({bahanId:"",qty:0,totalHarga:0});
   const [customProduk,setCustomProduk]=useState(null);
   const [customSelectedAddons,setCustomSelectedAddons]=useState([]);
@@ -263,6 +269,11 @@ function MainApp({currentUser,onLogout,users,onCurrentUserUpdate,ownerEmail}){
   function filterByPeriod(list,dk="waktu"){
     return list.filter(t=>{
       const d=new Date(t[dk]);
+      if(laporanPeriod==="custom"){
+        const start=new Date(laporanStartDate+"T00:00:00");
+        const end=new Date(laporanEndDate+"T23:59:59");
+        return d>=start&&d<=end;
+      }
       if(laporanPeriod==="hari") return d.toDateString()===now.toDateString();
       if(laporanPeriod==="minggu") return (now-d)/(86400000)<=7;
       return d.getMonth()===now.getMonth()&&d.getFullYear()===now.getFullYear();
@@ -598,7 +609,7 @@ function MainApp({currentUser,onLogout,users,onCurrentUserUpdate,ownerEmail}){
           <img src={LOGO_KOPINCANG} alt="Kopincang" style={{width:32,height:32,borderRadius:8,objectFit:"cover"}}/>
           <div>
             <div style={{fontSize:15,fontWeight:800}}>Kopincang Kasir</div>
-            <div style={{fontSize:10,color:"#D9C2A6"}}>{currentUser.nama} · {isAdmin?"Super Admin":(currentUser.jabatan||"Kasir")}</div>
+            <div style={{fontSize:10,color:"#D9C2A6"}}>{currentUser.nama} · {isAdmin?"Super Admin":isFinance?(currentUser.jabatan||"Finance"):(currentUser.jabatan||"Kasir")}</div>
           </div>
         </div>
         <div style={{display:"flex",gap:6,alignItems:"center"}}>
@@ -778,13 +789,25 @@ function MainApp({currentUser,onLogout,users,onCurrentUserUpdate,ownerEmail}){
         {/* KAS */}
         {tab==="kas"&&hasAccess("kas")&&(()=>{
           const today = new Date().toISOString().split("T")[0];
-          const effectiveDate = isAdmin ? kasFilterDate : today;
-          const effectiveViewAll = isAdmin && kasViewAll;
+          const effectiveViewAll = isFullKasAccess && kasViewAll;
 
-          const kasScoped = effectiveViewAll ? kas : kas.filter(k=>k.tanggal===effectiveDate);
-          const trxScoped = effectiveViewAll
-            ? aktivTrx.filter(t=>t.metode!=="Compliment")
-            : aktivTrx.filter(t=>t.metode!=="Compliment" && new Date(t.waktu).toISOString().split("T")[0]===effectiveDate);
+          // Scoping tanggal: Superadmin/Finance boleh pilih range (start-end) atau "Lihat Semua".
+          // Kasir hanya boleh pilih 1 tanggal (per hari), tidak ada mode range/lihat semua.
+          const dateInRange = (tglStr)=> tglStr>=kasFilterStart && tglStr<=kasFilterEnd;
+          const kasDateScoped = isFullKasAccess
+            ? (effectiveViewAll ? kas : kas.filter(k=>dateInRange(k.tanggal)))
+            : kas.filter(k=>k.tanggal===kasFilterDate);
+          const trxDateScoped = isFullKasAccess
+            ? (effectiveViewAll
+                ? aktivTrx.filter(t=>t.metode!=="Compliment")
+                : aktivTrx.filter(t=>t.metode!=="Compliment" && dateInRange(new Date(t.waktu).toISOString().split("T")[0])))
+            : aktivTrx.filter(t=>t.metode!=="Compliment" && new Date(t.waktu).toISOString().split("T")[0]===kasFilterDate);
+
+          // Segregasi: Kasir tidak boleh lihat pengeluaran yang dicatat oleh Superadmin/Finance (kecuali punya sendiri)
+          const kasScoped = isFullKasAccess
+            ? kasDateScoped
+            : kasDateScoped.filter(k=> !(k.jenis==="pengeluaran" && (k.dibuatOlehRole==="superadmin"||k.dibuatOlehRole==="finance") && k.dibuatOleh!==currentUser.nama));
+          const trxScoped = trxDateScoped;
 
           const kasManualPemasukan = kasScoped.filter(k=>k.jenis==="pemasukan").reduce((s,k)=>s+k.jumlah,0);
           const kasPengeluaran = kasScoped.filter(k=>k.jenis==="pengeluaran").reduce((s,k)=>s+k.jumlah,0);
@@ -795,20 +818,29 @@ function MainApp({currentUser,onLogout,users,onCurrentUserUpdate,ownerEmail}){
           <div>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
               <div style={{fontSize:15,fontWeight:700,color:"#4A2C2A"}}>Buku Kas</div>
-              <button style={S.btn("primary")} onClick={()=>{setEditKas({id:uid(),jenis:"pengeluaran",kategori:"Operasional",keterangan:"",jumlah:0,tanggal:new Date().toISOString().split("T")[0]});setKasModal(true);}}>
+              <button style={S.btn("primary")} onClick={()=>{setEditKas({id:uid(),jenis:"pengeluaran",kategori:"Operasional",keterangan:"",jumlah:0,tanggal:new Date().toISOString().split("T")[0],dibuatOleh:currentUser.nama,dibuatOlehRole:currentUser.role});setKasModal(true);}}>
                 <Plus size={13} style={{verticalAlign:"middle",marginRight:3}}/>Catat
               </button>
             </div>
 
-            {isAdmin&&(
-              <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:14}}>
-                <input type="date" style={{...S.input,flex:1}} value={kasFilterDate} onChange={e=>{setKasFilterDate(e.target.value);setKasViewAll(false);}} disabled={kasViewAll}/>
+            {isFullKasAccess&&(
+              <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:14,flexWrap:"wrap"}}>
+                <div style={{display:"flex",gap:6,alignItems:"center",flex:1,minWidth:200}}>
+                  <input type="date" style={{...S.input,flex:1}} value={kasFilterStart} onChange={e=>setKasFilterStart(e.target.value)} disabled={kasViewAll} max={kasFilterEnd}/>
+                  <span style={{fontSize:11,color:"#888"}}>s/d</span>
+                  <input type="date" style={{...S.input,flex:1}} value={kasFilterEnd} onChange={e=>setKasFilterEnd(e.target.value)} disabled={kasViewAll} min={kasFilterStart}/>
+                </div>
                 <button onClick={()=>setKasViewAll(v=>!v)} style={{border:"none",borderRadius:8,padding:"9px 12px",fontSize:11,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap",background:kasViewAll?"#6F4E37":"#f0e6d8",color:kasViewAll?"#fff":"#6F4E37"}}>
                   {kasViewAll?"✓ Semua Waktu":"Lihat Semua"}
                 </button>
               </div>
             )}
-            {!isAdmin&&<div style={{fontSize:11,color:"#888",marginBottom:12}}>Menampilkan data hari ini ({today})</div>}
+            {!isFullKasAccess&&(
+              <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:12}}>
+                <input type="date" style={{...S.input,flex:1}} value={kasFilterDate} onChange={e=>setKasFilterDate(e.target.value)} max={today}/>
+                <div style={{fontSize:10,color:"#aaa",whiteSpace:"nowrap"}}>Per hari saja</div>
+              </div>
+            )}
 
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:14}}>
               <div style={{...S.card,background:"#dcfce7",padding:12}}>
@@ -826,7 +858,7 @@ function MainApp({currentUser,onLogout,users,onCurrentUserUpdate,ownerEmail}){
             {kasScoped.slice().sort((a,b)=>new Date(b.tanggal)-new Date(a.tanggal)).map(k=>(
               <div key={k.id} style={{...S.card,borderLeft:`3px solid ${k.jenis==="pemasukan"?"#15803d":"#dc2626"}`}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                  <div style={{flex:1}}><div style={{fontSize:12,fontWeight:700,color:"#2d1a0e"}}>{k.keterangan}</div><div style={{fontSize:10,color:"#888"}}>{k.kategori} · {k.tanggal}</div></div>
+                  <div style={{flex:1}}><div style={{fontSize:12,fontWeight:700,color:"#2d1a0e"}}>{k.keterangan}</div><div style={{fontSize:10,color:"#888"}}>{k.kategori} · {k.tanggal}{isFullKasAccess&&k.dibuatOleh?` · oleh ${k.dibuatOleh}`:""}</div></div>
                   <div style={{display:"flex",alignItems:"center",gap:8}}>
                     <div style={{fontSize:13,fontWeight:800,color:k.jenis==="pemasukan"?"#15803d":"#dc2626"}}>{k.jenis==="pemasukan"?"+":"-"}{rp(k.jumlah)}</div>
                     <button style={{...S.btn("danger"),padding:"4px 7px"}} onClick={()=>removeDoc("kopincang_kas",k.id)}><Trash2 size={11}/></button>
@@ -843,10 +875,18 @@ function MainApp({currentUser,onLogout,users,onCurrentUserUpdate,ownerEmail}){
           <div>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10,flexWrap:"wrap",gap:8}}>
               <div style={{fontSize:15,fontWeight:700,color:"#4A2C2A"}}>Laporan Keuangan</div>
-              <div style={{display:"flex",gap:4}}>
+              <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
                 {["hari","minggu","bulan"].map(p=><button key={p} onClick={()=>setLaporanPeriod(p)} style={{border:"none",borderRadius:8,padding:"5px 10px",fontSize:11,fontWeight:600,cursor:"pointer",background:laporanPeriod===p?"#6F4E37":"#fff",color:laporanPeriod===p?"#fff":"#6F4E37"}}>{p}</button>)}
+                {isFullKasAccess&&<button onClick={()=>setLaporanPeriod("custom")} style={{border:"none",borderRadius:8,padding:"5px 10px",fontSize:11,fontWeight:600,cursor:"pointer",background:laporanPeriod==="custom"?"#6F4E37":"#fff",color:laporanPeriod==="custom"?"#fff":"#6F4E37"}}>custom</button>}
               </div>
             </div>
+            {isFullKasAccess&&laporanPeriod==="custom"&&(
+              <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:14,flexWrap:"wrap"}}>
+                <input type="date" style={{...S.input,flex:1,minWidth:130}} value={laporanStartDate} onChange={e=>setLaporanStartDate(e.target.value)} max={laporanEndDate}/>
+                <span style={{fontSize:11,color:"#888"}}>s/d</span>
+                <input type="date" style={{...S.input,flex:1,minWidth:130}} value={laporanEndDate} onChange={e=>setLaporanEndDate(e.target.value)} min={laporanStartDate}/>
+              </div>
+            )}
             <div style={{display:"flex",gap:8,marginBottom:14}}>
               <button style={{...S.btn("secondary"),flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:6}} onClick={printDailyReport}><Printer size={14}/>Cetak Laporan</button>
               <button style={{...S.btn("secondary"),flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:6}} onClick={downloadDailyReport}><Download size={14}/>Unduh Excel</button>
@@ -1125,6 +1165,12 @@ function MainApp({currentUser,onLogout,users,onCurrentUserUpdate,ownerEmail}){
               <div style={{marginBottom:14}}>
                 <label style={S.label}>Uang diterima</label>
                 <input style={S.input} type="number" placeholder="0" value={cashInput} onChange={e=>setCashInput(e.target.value)} autoFocus/>
+                <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:6,marginTop:8}}>
+                  <button type="button" onClick={()=>setCashInput(String(netTotal))} style={{...S.btn("secondary"),padding:"8px 4px",fontSize:11,fontWeight:700}}>Uang Pas</button>
+                  <button type="button" onClick={()=>setCashInput("20000")} style={{...S.btn("secondary"),padding:"8px 4px",fontSize:11,fontWeight:700}}>20.000</button>
+                  <button type="button" onClick={()=>setCashInput("50000")} style={{...S.btn("secondary"),padding:"8px 4px",fontSize:11,fontWeight:700}}>50.000</button>
+                  <button type="button" onClick={()=>setCashInput("100000")} style={{...S.btn("secondary"),padding:"8px 4px",fontSize:11,fontWeight:700}}>100.000</button>
+                </div>
                 {Number(cashInput)>0&&<div style={{marginTop:10,padding:"12px 14px",borderRadius:10,background:Number(cashInput)>=netTotal?"#dcfce7":"#fee2e2"}}>
                   {Number(cashInput)>=netTotal?<><div style={{fontSize:11,color:"#15803d"}}>Kembalian</div><div style={{fontSize:24,fontWeight:800,color:"#15803d"}}>{rp(Number(cashInput)-netTotal)}</div></>:<div style={{fontSize:12,color:"#dc2626",fontWeight:600}}>Kurang {rp(netTotal-Number(cashInput))}</div>}
                 </div>}
@@ -1230,7 +1276,7 @@ function MainApp({currentUser,onLogout,users,onCurrentUserUpdate,ownerEmail}){
             {users.map(u=><div key={u.id} style={{...S.card,padding:10,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
               <div><div style={{fontSize:13,fontWeight:600}}>{u.nama}</div><div style={{fontSize:11,color:"#888"}}>@{u.username} · {u.role}</div></div>
               <div style={{display:"flex",alignItems:"center",gap:8}}>
-                <span style={{background:u.role==="superadmin"?"#6F4E3722":"#15803d22",color:u.role==="superadmin"?"#6F4E37":"#15803d",fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:99}}>{u.role==="superadmin"?"Super Admin":(u.jabatan||"Kasir")}</span>
+                <span style={{background:u.role==="superadmin"?"#6F4E3722":u.role==="finance"?"#b4530922":"#15803d22",color:u.role==="superadmin"?"#6F4E37":u.role==="finance"?"#b45309":"#15803d",fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:99}}>{u.role==="superadmin"?"Super Admin":u.role==="finance"?(u.jabatan||"Finance"):(u.jabatan||"Kasir")}</span>
                 <button style={{...S.btn("secondary"),padding:"5px 8px"}} onClick={()=>{setEditUserForm({...u});setEditUserModal("edit");}}><Edit2 size={12}/></button>
               </div>
             </div>)}
@@ -1537,18 +1583,20 @@ function MainApp({currentUser,onLogout,users,onCurrentUserUpdate,ownerEmail}){
           <div style={{marginBottom:10}}><label style={S.label}>Password</label><input style={S.input} type="text" value={editUserForm.password} onChange={e=>setEditUserForm(f=>({...f,password:e.target.value}))} placeholder="password"/></div>
           <div style={{marginBottom:16}}>
             <label style={S.label}>Role</label>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
               <button onClick={()=>setEditUserForm(f=>({...f,role:"superadmin"}))} style={{border:`2px solid ${editUserForm.role==="superadmin"?"#6F4E37":"#e0d0c0"}`,borderRadius:10,padding:10,cursor:"pointer",background:editUserForm.role==="superadmin"?"#FBF3E7":"#fff",fontWeight:700,fontSize:12,color:"#6F4E37"}}>Super Admin</button>
+              <button onClick={()=>setEditUserForm(f=>({...f,role:"finance",jabatan:f.jabatan||"Finance",permissions:(f.permissions&&f.permissions.length?f.permissions:["kas","laporan"])}))} style={{border:`2px solid ${editUserForm.role==="finance"?"#b45309":"#e0d0c0"}`,borderRadius:10,padding:10,cursor:"pointer",background:editUserForm.role==="finance"?"#fef3c7":"#fff",fontWeight:700,fontSize:12,color:"#b45309"}}>Finance</button>
               <button onClick={()=>setEditUserForm(f=>({...f,role:"kasir"}))} style={{border:`2px solid ${editUserForm.role==="kasir"?"#15803d":"#e0d0c0"}`,borderRadius:10,padding:10,cursor:"pointer",background:editUserForm.role==="kasir"?"#dcfce7":"#fff",fontWeight:700,fontSize:12,color:"#15803d"}}>Kasir</button>
             </div>
+            {editUserForm.role==="finance"&&<div style={{fontSize:10,color:"#aaa",marginTop:6}}>Finance dapat akses penuh ke menu Kas &amp; Laporan (range tanggal, lihat semua), sama seperti Super Admin — tapi tidak bisa kelola Produk/Stok/User/Pengaturan.</div>}
           </div>
-          {editUserForm.role==="kasir"&&(
+          {editUserForm.role!=="superadmin"&&(
             <div style={{marginBottom:14}}>
               <label style={S.label}>Jabatan (nama peran, bebas diisi)</label>
               <input style={S.input} value={editUserForm.jabatan||""} onChange={e=>setEditUserForm(f=>({...f,jabatan:e.target.value}))} placeholder="cth: Kasir, Finance, Barista, Admin Toko"/>
             </div>
           )}
-          {editUserForm.role==="kasir"&&(
+          {editUserForm.role!=="superadmin"&&(
             <div style={{marginBottom:16}}>
               <label style={S.label}>Menu yang Boleh Diakses</label>
               <div style={{...S.card,padding:10,marginBottom:0}}>
