@@ -1393,7 +1393,14 @@ function MainApp({currentUser,onLogout,users,onCurrentUserUpdate,ownerEmail}){
             <button style={{border:"none",background:"none",cursor:"pointer"}} onClick={()=>setProdukModal(null)}><X size={20}/></button>
           </div>
           <div style={{marginBottom:12}}><label style={S.label}>Nama Produk</label><input style={S.input} value={editProd.nama} onChange={e=>setEditProd(p=>({...p,nama:e.target.value}))} placeholder="cth: Kopsus Matcha"/></div>
-          <div style={{marginBottom:12}}><label style={S.label}>Kategori</label><select style={S.input} value={editProd.kategori} onChange={e=>setEditProd(p=>({...p,kategori:e.target.value}))}><option>Kopi</option><option>Kopi Susu</option><option>Kopi Spesial</option><option>Non-Kopi</option></select></div>
+          <div style={{marginBottom:12}}>
+            <label style={S.label}>Kategori</label>
+            <input style={S.input} list="kategoriOptions" value={editProd.kategori} onChange={e=>setEditProd(p=>({...p,kategori:e.target.value}))} placeholder="Pilih atau ketik kategori baru"/>
+            <datalist id="kategoriOptions">
+              {[...new Set([...produkList.map(p=>p.kategori),"Kopi","Kopi Susu","Kopi Spesial","Non-Kopi"])].map(k=><option key={k} value={k}/>)}
+            </datalist>
+            <div style={{fontSize:10,color:"#aaa",marginTop:4}}>Bisa pilih kategori yang sudah ada, atau ketik nama kategori baru</div>
+          </div>
           <div style={{marginBottom:12}}>
             <label style={S.label}>Komposisi Bahan Baku</label>
             {editProd.bahan.map(b=>{const bahan=bahanList.find(x=>x.id===b.id);if(!bahan)return null;return(<div key={b.id} style={{display:"flex",alignItems:"center",gap:6,marginBottom:6}}>
