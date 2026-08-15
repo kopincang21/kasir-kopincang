@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { ShoppingCart, Package, Coffee, BarChart2, Plus, Trash2, Edit2, X, Check, Minus, AlertCircle, QrCode, Banknote, ArrowLeft, TrendingUp, Receipt, Settings, Warehouse, BookOpen, TrendingDown, AlertTriangle, LogOut, User, Lock, XCircle, Printer, Download, Wifi, WifiOff, Gift, ShoppingBag, Search, Eye, EyeOff, KeyRound, LayoutDashboard } from "lucide-react";
 import * as XLSX from "xlsx";
+import ExcelJS from "exceljs";
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import { initializeApp } from "firebase/app";
 import { getFirestore, collection, doc, setDoc, deleteDoc, updateDoc, onSnapshot } from "firebase/firestore";
@@ -497,9 +498,12 @@ function MainApp({currentUser,onLogout,users,onCurrentUserUpdate,ownerEmail}){
   }
   function buildDailyReportHTML(){
     const rows=filteredTrx.map(t=>`<tr><td style="padding:4px">${new Date(t.waktu).toLocaleString("id-ID",{dateStyle:"short",timeStyle:"short"})}</td><td style="padding:4px">${t.items.map(i=>`${i.nama}x${i.qty}`).join(", ")}</td><td style="padding:4px;text-align:right">${rp(t.total)}</td><td style="padding:4px;text-align:right">${rp(t.laba)}</td><td style="padding:4px">${t.metode}</td></tr>`).join("");
+    const pengeluaranList=filteredKas.filter(k=>k.jenis==="pengeluaran").sort((a,b)=>new Date(a.tanggal)-new Date(b.tanggal));
+    const pengeluaranRows=pengeluaranList.map(k=>`<tr><td style="padding:4px">${new Date(k.tanggal).toLocaleDateString("id-ID",{dateStyle:"short"})}</td><td style="padding:4px">${k.keterangan}</td><td style="padding:4px">${k.kategori}</td><td style="padding:4px;text-align:right">${rp(k.jumlah)}</td></tr>`).join("");
     return `<html><head><title>Laporan Kopincang</title><style>
       body{font-family:Arial,sans-serif;padding:24px;color:#2d1a0e;}
       h1{color:#4A2C2A;margin-bottom:2px;}
+      h2{color:#4A2C2A;font-size:15px;margin:20px 0 8px;}
       p.sub{color:#888;margin-top:0;margin-bottom:16px;}
       table{width:100%;border-collapse:collapse;font-size:12px;}
       th{background:#6F4E37;color:#fff;padding:6px;text-align:left;}
@@ -518,8 +522,12 @@ function MainApp({currentUser,onLogout,users,onCurrentUserUpdate,ownerEmail}){
         <div class="box"><div class="label">Laba Bersih</div><div class="val">${rp(labaBersih)}</div></div>
         <div class="box"><div class="label">Margin</div><div class="val">${marginPeriod.toFixed(1)}%</div></div>
       </div>
+      <h2>Rincian Penjualan</h2>
       <table><thead><tr><th>Waktu</th><th>Item</th><th style="text-align:right">Total</th><th style="text-align:right">Laba</th><th>Metode</th></tr></thead>
       <tbody>${rows||'<tr><td colspan="5" style="padding:10px;text-align:center;color:#aaa">Tidak ada transaksi</td></tr>'}</tbody></table>
+      <h2>Rincian Pengeluaran</h2>
+      <table><thead><tr><th>Tanggal</th><th>Keterangan</th><th>Kategori</th><th style="text-align:right">Jumlah</th></tr></thead>
+      <tbody>${pengeluaranRows||'<tr><td colspan="4" style="padding:10px;text-align:center;color:#aaa">Tidak ada pengeluaran</td></tr>'}</tbody></table>
     </body></html>`;
   }
   function printDailyReport(){
@@ -528,53 +536,141 @@ function MainApp({currentUser,onLogout,users,onCurrentUserUpdate,ownerEmail}){
     w.document.close();
     setTimeout(()=>w.print(),300);
   }
-  function downloadDailyReport(){
-    const wb = XLSX.utils.book_new();
+  async function downloadDailyReport(){
+    const namaBulan=new Date().toLocaleString("id-ID",{month:"long"});
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet("Laporan Harian");
 
-    // Sheet 1: Ringkasan
-    const ringkasan = [
-      ["LAPORAN KEUANGAN KOPINCANG"],
-      [`Periode: ${laporanPeriod} — Dicetak ${new Date().toLocaleString("id-ID",{dateStyle:"full",timeStyle:"short"})}`],
-      [],
-      ["Total Penjualan", totalPenjualan],
-      ["Laba Kotor", totalLabaKotor],
-      ["Pemasukan Kas", totalPemasukan],
-      ["Pengeluaran Kas", totalPengeluaran],
-      ["Laba Bersih", labaBersih],
-      ["Margin Laba (%)", Number(marginPeriod.toFixed(1))],
-      ["Jumlah Transaksi", filteredTrxJual.length],
-      ["Nilai Compliment", totalNilaiCompliment],
-    ];
-    const wsRingkasan = XLSX.utils.aoa_to_sheet(ringkasan);
-    wsRingkasan["!cols"]=[{wch:22},{wch:20}];
-    XLSX.utils.book_append_sheet(wb, wsRingkasan, "Ringkasan");
+    // ── warna & style bantu ──────────────────────────────────────────
+    const RED="FFFF0000", GREEN="FF00B050", DARK="FF3B2A1E";
+    const titleStyle=(fillColor)=>({font:{bold:true,color:{argb:"FFFFFFFF"},size:12},
+      fill:{type:"pattern",pattern:"solid",fgColor:{argb:fillColor}},
+      alignment:{horizontal:"center",vertical:"middle"},
+      border:{top:{style:"thin"},bottom:{style:"thin"},left:{style:"thin"},right:{style:"thin"}}});
+    const headerStyle=(fillColor)=>({font:{bold:true,color:{argb:"FFFFFFFF"},size:10},
+      fill:{type:"pattern",pattern:"solid",fgColor:{argb:fillColor}},
+      alignment:{horizontal:"center",vertical:"middle",wrapText:true},
+      border:{top:{style:"thin"},bottom:{style:"thin"},left:{style:"thin"},right:{style:"thin"}}});
+    const cellBorder={border:{top:{style:"thin",color:{argb:"FFE0E0E0"}},bottom:{style:"thin",color:{argb:"FFE0E0E0"}},left:{style:"thin",color:{argb:"FFE0E0E0"}},right:{style:"thin",color:{argb:"FFE0E0E0"}}}};
+    const rupiah="#,##0.00";
+    function styleRow(row,cols,extra={}){
+      cols.forEach(c=>{ const cell=row.getCell(c); Object.assign(cell,cellBorder); if(extra) Object.assign(cell,extra); });
+    }
+    function setTitle(range,text,fillColor){
+      ws.mergeCells(range);
+      const cell=ws.getCell(range.split(":")[0]);
+      cell.value=text; Object.assign(cell,titleStyle(fillColor));
+    }
+    function setHeaders(rowNum,startCol,labels,fillColor){
+      labels.forEach((label,i)=>{
+        const cell=ws.getCell(rowNum,startCol+i);
+        cell.value=label; Object.assign(cell,headerStyle(fillColor));
+      });
+    }
 
-    // Sheet 2: Detail Transaksi
-    const detailHeader=["Waktu","Kasir","Item","Subtotal","Diskon","Biaya Admin","Total Diterima","Laba","Metode","Status"];
-    const detailRows=filteredTrx.map(t=>[
-      new Date(t.waktu).toLocaleString("id-ID"),
-      t.kasir||"-",
-      t.items.map(i=>`${i.nama} x${i.qty}`).join(" | "),
-      t.grossTotal||t.total,
-      t.diskon||0,
-      t.biayaAdmin||0,
-      t.total,
-      t.laba,
-      t.metode,
-      t.cancelled?`DIBATALKAN${t.cancelReason?" - "+t.cancelReason:""}`:"Aktif"
-    ]);
-    const wsDetail = XLSX.utils.aoa_to_sheet([detailHeader,...detailRows]);
-    wsDetail["!cols"]=[{wch:20},{wch:14},{wch:35},{wch:14},{wch:12},{wch:14},{wch:16},{wch:14},{wch:12},{wch:24}];
-    XLSX.utils.book_append_sheet(wb, wsDetail, "Detail Transaksi");
+    // ── SECTION 1: PENJUALAN HARIAN (kolom B–H) ──────────────────────
+    setTitle("B1:H1", `PENJUALAN HARIAN PERBULAN ${namaBulan}`, RED);
+    setHeaders(2,2,["Tanggal","Nama Produk","Qty Terjual","Harga Jual/Cup","Total Penjualan","Total Penjualan Harian","Keterangan"],GREEN);
 
-    // Sheet 3: Performa Produk
-    const perfHeader=["Produk","Qty Terjual","Total Penjualan","Laba"];
-    const perfRows=produkPerforma.map(p=>[p.nama,p.qty,p.total,p.laba]);
-    const wsPerf = XLSX.utils.aoa_to_sheet([perfHeader,...perfRows]);
-    wsPerf["!cols"]=[{wch:24},{wch:14},{wch:18},{wch:14}];
-    XLSX.utils.book_append_sheet(wb, wsPerf, "Performa Produk");
+    // urutkan transaksi berdasar tanggal, lalu pecah per item
+    const trxSorted=[...filteredTrxJual].sort((a,b)=>new Date(a.waktu)-new Date(b.waktu));
+    const byDate={};
+    trxSorted.forEach(t=>{
+      const tgl=new Date(t.waktu).toLocaleDateString("id-ID",{day:"numeric",month:"numeric",year:"numeric"});
+      if(!byDate[tgl]) byDate[tgl]={rows:[],total:0};
+      t.items.forEach(item=>{
+        byDate[tgl].rows.push({tgl,nama:item.nama,qty:item.qty,harga:item.hargaJual,total:item.hargaJual*item.qty,metode:t.metode});
+        byDate[tgl].total+=item.hargaJual*item.qty;
+      });
+    });
+    // warna per metode pembayaran
+    const METODE_COLOR={
+      "QRIS":"FF6F4E37","Cash":"FF3B2A1E","ShopeeFood":"FFEE4D2D","GrabFood":"FF00B14F","GoFood":"FF00AA13",
+    };
+    let r=3;
+    Object.entries(byDate).forEach(([tgl,d])=>{
+      d.rows.forEach((row,i)=>{
+        const excelRow=ws.getRow(r);
+        excelRow.getCell(2).value=row.tgl;
+        excelRow.getCell(3).value=row.nama;
+        excelRow.getCell(4).value=row.qty;
+        excelRow.getCell(5).value=row.harga; excelRow.getCell(5).numFmt=rupiah;
+        excelRow.getCell(6).value=row.total; excelRow.getCell(6).numFmt=rupiah;
+        if(i===d.rows.length-1){ excelRow.getCell(7).value=d.total; excelRow.getCell(7).numFmt=rupiah; }
+        const ketCell=excelRow.getCell(8);
+        ketCell.value=row.metode;
+        ketCell.font={bold:true,color:{argb:"FFFFFFFF"}};
+        ketCell.fill={type:"pattern",pattern:"solid",fgColor:{argb:METODE_COLOR[row.metode]||"FF4A2C2A"}};
+        ketCell.alignment={horizontal:"center"};
+        styleRow(excelRow,[2,3,4,5,6,7,8]);
+        r++;
+      });
+    });
+    const lastRowSec1=r-1;
 
-    XLSX.writeFile(wb, `laporan-kopincang-${laporanPeriod}-${new Date().toISOString().split("T")[0]}.xlsx`);
+    // ── SECTION 2: LABA HARIAN (kolom J–M) ───────────────────────────
+    setTitle("J1:M1", `LABA HARIAN BULAN ${namaBulan}`, RED);
+    setHeaders(2,10,["Produk","Qty Terjual","Laba/Cup","Total Laba"],GREEN);
+    let r2=3;
+    produkPerforma.forEach(p=>{
+      const excelRow=ws.getRow(r2);
+      excelRow.getCell(10).value=p.nama;
+      excelRow.getCell(11).value=p.qty;
+      excelRow.getCell(12).value=p.qty?p.laba/p.qty:0; excelRow.getCell(12).numFmt=rupiah;
+      excelRow.getCell(13).value=p.laba; excelRow.getCell(13).numFmt=rupiah;
+      styleRow(excelRow,[10,11,12,13]);
+      r2++;
+    });
+    // baris TOTAL
+    const totalRow=ws.getRow(r2);
+    totalRow.getCell(11).value=produkPerforma.reduce((s,p)=>s+p.qty,0);
+    totalRow.getCell(10).value="TOTAL"; totalRow.getCell(10).font={bold:true};
+    totalRow.getCell(11).font={bold:true};
+    totalRow.getCell(13).value=totalLabaKotor; totalRow.getCell(13).numFmt=rupiah; totalRow.getCell(13).font={bold:true};
+    styleRow(totalRow,[10,11,12,13],{font:{bold:true}});
+
+    // ── SECTION 3: PENGELUARAN (kolom O–T) ───────────────────────────
+    setTitle("O1:T1","PENGELUARAN",RED);
+    setHeaders(2,15,["Tanggal","Nama Bahan","Qty","Harga Satuan","Total Pembelian","Supplier"],GREEN);
+    const pengeluaranSorted=[...filteredKas].filter(k=>k.jenis==="pengeluaran").sort((a,b)=>new Date(a.tanggal)-new Date(b.tanggal));
+    let r3=3;
+    pengeluaranSorted.forEach(k=>{
+      const match=k.keterangan?.match(/Beli\s+([\d.,]+)\s+(\S+)\s+(.+)/i);
+      const excelRow=ws.getRow(r3);
+      excelRow.getCell(15).value=new Date(k.tanggal).toLocaleDateString("id-ID",{day:"2-digit",month:"2-digit",year:"numeric"});
+      excelRow.getCell(16).value=match?match[3]:k.keterangan;
+      const qty=match?Number(match[1].replace(",","."))||"-":"-";
+      excelRow.getCell(17).value=qty;
+      excelRow.getCell(18).value=qty!=="-"?k.jumlah/qty:"-";
+      if(excelRow.getCell(18).value!=="-") excelRow.getCell(18).numFmt=rupiah;
+      excelRow.getCell(19).value=k.jumlah; excelRow.getCell(19).numFmt=rupiah;
+      excelRow.getCell(20).value="-"; // Supplier belum tercatat di sistem
+      styleRow(excelRow,[15,16,17,18,19,20]);
+      r3++;
+    });
+
+    // ── lebar kolom & freeze header ───────────────────────────────────
+    ws.getColumn(1).width=3;
+    [2,15].forEach(c=>ws.getColumn(c).width=12);
+    [3,16].forEach(c=>ws.getColumn(c).width=20);
+    [4,17].forEach(c=>ws.getColumn(c).width=10);
+    [5,6,7,18,19].forEach(c=>ws.getColumn(c).width=16);
+    ws.getColumn(8).width=12;
+    ws.getColumn(9).width=3;
+    ws.getColumn(10).width=20;
+    ws.getColumn(11).width=10;
+    ws.getColumn(12).width=14;
+    ws.getColumn(13).width=14;
+    ws.getColumn(14).width=3;
+    ws.getColumn(20).width=16;
+    ws.views=[{state:"frozen",ySplit:2}];
+
+    const buffer=await wb.xlsx.writeBuffer();
+    const blob=new Blob([buffer],{type:"application/octet-stream"});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement("a");
+    a.href=url; a.download=`laporan-kopincang-${laporanPeriod}-${new Date().toISOString().split("T")[0]}.xlsx`;
+    a.click(); URL.revokeObjectURL(url);
   }
 
   const S={
