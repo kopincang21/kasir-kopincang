@@ -181,6 +181,7 @@ function MainApp({currentUser,onLogout,users,onCurrentUserUpdate,ownerEmail}){
   const [tab,setTab]=useState("kasir");
   const [bahanList,setBahanList]=useState([]);
   const [produkList,setProdukList]=useState([]);
+  const [kategoriProdukList,setKategoriProdukList]=useState([]);
   const [addonList,setAddonList]=useState([]);
   const [cart,setCart]=useState([]);
   const [transaksi,setTransaksi]=useState([]);
@@ -240,6 +241,11 @@ function MainApp({currentUser,onLogout,users,onCurrentUserUpdate,ownerEmail}){
       if(list.length===0 && !seeded){ INIT_ADDON.forEach(a=>writeDoc("kopincang_addon", a.id, a)); }
       else setAddonList(list);
     });
+    const unsubKategori = subscribeCollection("kopincang_kategori", (list)=>{
+      if(list.length===0 && !seeded){
+        [{id:"kat1",nama:"Kopi"},{id:"kat2",nama:"Kopi Susu"},{id:"kat3",nama:"Kopi Spesial"},{id:"kat4",nama:"Non-Kopi"}].forEach(k=>writeDoc("kopincang_kategori", k.id, k));
+      } else setKategoriProdukList(list);
+    });
     const unsubTrx = subscribeCollection("kopincang_transaksi", (list)=>{
       setTransaksi(list.map(t=>({...t,waktu:new Date(t.waktu)})).sort((a,b)=>b.waktu-a.waktu));
     });
@@ -250,7 +256,7 @@ function MainApp({currentUser,onLogout,users,onCurrentUserUpdate,ownerEmail}){
     }, {targetMargin:60});
     setSeeded(true);
     setSyncStatus("online");
-    return ()=>{ unsubBahan();unsubProduk();unsubAddon();unsubTrx();unsubKas();unsubSettings(); };
+    return ()=>{ unsubBahan();unsubProduk();unsubAddon();unsubKategori();unsubTrx();unsubKas();unsubSettings(); };
     // eslint-disable-next-line
   },[]);
 
@@ -1395,11 +1401,20 @@ function MainApp({currentUser,onLogout,users,onCurrentUserUpdate,ownerEmail}){
           <div style={{marginBottom:12}}><label style={S.label}>Nama Produk</label><input style={S.input} value={editProd.nama} onChange={e=>setEditProd(p=>({...p,nama:e.target.value}))} placeholder="cth: Kopsus Matcha"/></div>
           <div style={{marginBottom:12}}>
             <label style={S.label}>Kategori</label>
-            <input style={S.input} list="kategoriOptions" value={editProd.kategori} onChange={e=>setEditProd(p=>({...p,kategori:e.target.value}))} placeholder="Pilih atau ketik kategori baru"/>
-            <datalist id="kategoriOptions">
-              {[...new Set([...produkList.map(p=>p.kategori),"Kopi","Kopi Susu","Kopi Spesial","Non-Kopi"])].map(k=><option key={k} value={k}/>)}
-            </datalist>
-            <div style={{fontSize:10,color:"#aaa",marginTop:4}}>Bisa pilih kategori yang sudah ada, atau ketik nama kategori baru</div>
+            <div style={{display:"flex",gap:8}}>
+              <select style={{...S.input,flex:1}} value={editProd.kategori} onChange={e=>setEditProd(p=>({...p,kategori:e.target.value}))}>
+                {kategoriProdukList.length===0&&<option value="">Belum ada kategori</option>}
+                {kategoriProdukList.map(k=><option key={k.id} value={k.nama}>{k.nama}</option>)}
+              </select>
+              <button type="button" onClick={()=>{
+                const nama=(window.prompt("Nama kategori baru:")||"").trim();
+                if(!nama) return;
+                if(kategoriProdukList.some(k=>k.nama.toLowerCase()===nama.toLowerCase())){ setEditProd(p=>({...p,kategori:nama})); return; }
+                const id=uid();
+                writeDoc("kopincang_kategori", id, {id,nama});
+                setEditProd(p=>({...p,kategori:nama}));
+              }} style={{...S.btn("secondary"),padding:"0 14px",whiteSpace:"nowrap",fontSize:12,fontWeight:700}}>+ Tambah Kategori</button>
+            </div>
           </div>
           <div style={{marginBottom:12}}>
             <label style={S.label}>Komposisi Bahan Baku</label>
