@@ -12,7 +12,8 @@
     "build:app": "vite build && electron-builder"
   },
   "dependencies": {
-    "firebase": "^12.17.0",
+    "exceljs": "^4.4.0",
+    "firebase": "^12.17.1",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "recharts": "^3.10.1",
