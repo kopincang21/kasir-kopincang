@@ -187,6 +187,7 @@ function MainApp({currentUser,onLogout,users,onCurrentUserUpdate,ownerEmail}){
   const [heldOrders,setHeldOrders]=useState([]);
   const [heldNameModal,setHeldNameModal]=useState(false);
   const [heldNameInput,setHeldNameInput]=useState("");
+  const [deleteHeldModal,setDeleteHeldModal]=useState(null);
   const [transaksi,setTransaksi]=useState([]);
   const [kas,setKas]=useState([]);
   const [syncStatus,setSyncStatus]=useState("connecting"); // connecting | online | error
@@ -823,7 +824,7 @@ function MainApp({currentUser,onLogout,users,onCurrentUserUpdate,ownerEmail}){
                       </div>
                       <div style={{display:"flex",gap:6}}>
                         <button style={{...S.btn("primary"),padding:"6px 10px",fontSize:11}} onClick={()=>resumeHeldOrder(o)}>Lanjutkan</button>
-                        <button style={{...S.btn("danger"),padding:"6px 8px"}} onClick={()=>{ if(window.confirm(`Hapus order "${o.namaCustomer}"?`)) removeDoc("kopincang_held_orders",o.id); }}><Trash2 size={13}/></button>
+                        <button style={{...S.btn("danger"),padding:"6px 8px"}} onClick={()=>setDeleteHeldModal(o)}><Trash2 size={13}/></button>
                       </div>
                     </div>
                   </div>
@@ -1350,6 +1351,22 @@ function MainApp({currentUser,onLogout,users,onCurrentUserUpdate,ownerEmail}){
           </div>
           <div style={{fontSize:11,color:"#888",marginBottom:14}}>Keranjang ({cart.reduce((s,i)=>s+i.qty,0)} item, {rp(cartTotal)}) akan disimpan dan bisa dilanjutkan nanti dari daftar "Order Tertunda".</div>
           <button disabled={!heldNameInput.trim()} style={{...S.btn("primary"),width:"100%",padding:13,opacity:!heldNameInput.trim()?0.4:1}} onClick={saveHeldOrder}>Simpan Order</button>
+        </div>
+      </div>}
+
+      {/* KONFIRMASI HAPUS HELD ORDER */}
+      {deleteHeldModal&&<div style={S.overlay} onClick={()=>setDeleteHeldModal(null)}>
+        <div style={S.sheet} onClick={e=>e.stopPropagation()}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+            <div style={{fontSize:15,fontWeight:800,color:"#4A2C2A"}}>Batalkan Order?</div>
+            <button style={{border:"none",background:"none",cursor:"pointer"}} onClick={()=>setDeleteHeldModal(null)}><X size={20}/></button>
+          </div>
+          <div style={{fontSize:13,color:"#555",marginBottom:6}}>Order tertunda atas nama <b>{deleteHeldModal.namaCustomer}</b> akan dihapus permanen dan tidak bisa dikembalikan.</div>
+          <div style={{fontSize:11,color:"#888",marginBottom:20}}>{(deleteHeldModal.items||[]).map(i=>`${i.nama}×${i.qty}`).join(", ")}</div>
+          <div style={{display:"flex",gap:8}}>
+            <button style={{...S.btn("secondary"),flex:1,padding:12}} onClick={()=>setDeleteHeldModal(null)}>Batal</button>
+            <button style={{...S.btn("danger"),flex:1,padding:12}} onClick={()=>{ removeDoc("kopincang_held_orders",deleteHeldModal.id); setDeleteHeldModal(null); }}>Ya, Hapus</button>
+          </div>
         </div>
       </div>}
 
