@@ -755,7 +755,7 @@ function MainApp({currentUser,onLogout,users,onCurrentUserUpdate,ownerEmail}){
       {/* NAV */}
       <nav style={S.nav}>{tabs.map(t=><button key={t.id} style={S.navBtn(tab===t.id)} onClick={()=>setTab(t.id)}>{t.icon}{t.label}</button>)}</nav>
 
-      <div style={{flex:1,padding:14,overflowY:"auto"}}>
+      <div style={{flex:1,padding:14,paddingBottom:(tab==="kasir"&&heldOrders.length>0)?76:14,overflowY:"auto"}}>
 
         {/* KASIR */}
         {tab==="kasir"&&(
