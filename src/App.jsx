@@ -188,6 +188,8 @@ function MainApp({currentUser,onLogout,users,onCurrentUserUpdate,ownerEmail}){
   const [heldNameModal,setHeldNameModal]=useState(false);
   const [heldNameInput,setHeldNameInput]=useState("");
   const [deleteHeldModal,setDeleteHeldModal]=useState(null);
+  const [cartModalOpen,setCartModalOpen]=useState(false);
+  const [cartModalTab,setCartModalTab]=useState("keranjang"); // "keranjang" | "tertunda"
   const [transaksi,setTransaksi]=useState([]);
   const [kas,setKas]=useState([]);
   const [syncStatus,setSyncStatus]=useState("connecting"); // connecting | online | error
@@ -373,7 +375,7 @@ function MainApp({currentUser,onLogout,users,onCurrentUserUpdate,ownerEmail}){
       waktu:new Date().toISOString(), dibuatOleh:currentUser.nama,
     });
     setCart([]); setDiskonInput(0); setAdminInput(0);
-    setHeldNameModal(false); setHeldNameInput("");
+    setHeldNameModal(false); setHeldNameInput(""); setCartModalOpen(false);
   }
   function resumeHeldOrder(order){
     if(cart.length>0 && !window.confirm(`Keranjang saat ini belum kosong. Timpa dengan order "${order.namaCustomer}"?`)) return;
@@ -381,6 +383,7 @@ function MainApp({currentUser,onLogout,users,onCurrentUserUpdate,ownerEmail}){
     setDiskonInput(order.diskonInput||0); setDiskonMode(order.diskonMode||"rp");
     setAdminInput(order.adminInput||0); setAdminMode(order.adminMode||"rp");
     removeDoc("kopincang_held_orders", order.id);
+    setCartModalTab("keranjang");
   }
 
   function deductStock(items){
@@ -784,52 +787,20 @@ function MainApp({currentUser,onLogout,users,onCurrentUserUpdate,ownerEmail}){
                 </button>);
               })}
             </div>
-            {cart.length>0&&(
-              <div style={{...S.card,border:"2px solid #D9C2A6"}}>
-                <div style={{fontWeight:700,fontSize:13,color:"#4A2C2A",marginBottom:10,display:"flex",alignItems:"center",gap:6}}><ShoppingCart size={15}/> Keranjang ({cart.reduce((s,i)=>s+i.qty,0)} item)</div>
-                {cart.map(item=>(
-                  <div key={item.cartKey} style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
-                    <div style={{flex:1}}><div style={{fontSize:12,fontWeight:600,color:"#2d1a0e"}}>{item.nama}</div><div style={{fontSize:11,color:"#888"}}>{rp(item.hargaJual)}/cup</div></div>
-                    <div style={{display:"flex",alignItems:"center",gap:4}}>
-                      <button onClick={()=>updateQty(item.cartKey,-1)} style={{border:"1px solid #e0d0c0",borderRadius:6,padding:"3px 8px",background:"#fff",cursor:"pointer"}}><Minus size={12}/></button>
-                      <span style={{fontSize:13,fontWeight:700,minWidth:18,textAlign:"center"}}>{item.qty}</span>
-                      <button onClick={()=>updateQty(item.cartKey,1)} style={{border:"1px solid #e0d0c0",borderRadius:6,padding:"3px 8px",background:"#fff",cursor:"pointer"}}><Plus size={12}/></button>
-                    </div>
-                    <div style={{fontSize:13,fontWeight:700,color:"#4A2C2A",minWidth:65,textAlign:"right"}}>{rp(item.hargaJual*item.qty)}</div>
-                  </div>
-                ))}
-                <div style={{borderTop:"1px solid #f0e6d8",paddingTop:10,marginTop:4}}>
-                  <div style={{display:"flex",justifyContent:"space-between",marginBottom:10}}>
-                    <span style={{fontSize:14,fontWeight:700,color:"#4A2C2A"}}>Total</span>
-                    <span style={{fontSize:18,fontWeight:900,color:"#4A2C2A"}}>{rp(cartTotal)}</span>
-                  </div>
-                  <div style={{display:"flex",gap:8}}>
-                    <button style={{...S.btn("secondary"),flex:1,padding:10}} onClick={()=>setCart([])}>Batal</button>
-                    <button style={{...S.btn("secondary"),flex:1,padding:10,fontSize:12}} onClick={()=>setHeldNameModal(true)}>Simpan Order</button>
-                    <button style={{...S.btn("primary"),flex:2,padding:10}} onClick={()=>setPayModal("pilih")}>Bayar {rp(cartTotal)}</button>
-                  </div>
-                </div>
-              </div>
-            )}
-            {heldOrders.length>0&&(
-              <div style={{marginTop:16}}>
-                <div style={{fontSize:13,fontWeight:700,color:"#4A2C2A",marginBottom:8,display:"flex",alignItems:"center",gap:6}}><Receipt size={14}/> Order Tertunda ({heldOrders.length})</div>
-                {heldOrders.map(o=>(
-                  <div key={o.id} style={{...S.card,padding:10,marginBottom:8,borderLeft:"3px solid #b45309"}}>
-                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
-                      <div style={{flex:1,minWidth:0}}>
-                        <div style={{fontSize:12,fontWeight:800,color:"#4A2C2A"}}>{o.namaCustomer}</div>
-                        <div style={{fontSize:11,color:"#888",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{(o.items||[]).map(i=>`${i.nama}×${i.qty}`).join(", ")}</div>
-                        <div style={{fontSize:10,color:"#aaa"}}>{new Date(o.waktu).toLocaleTimeString("id-ID",{hour:"2-digit",minute:"2-digit"})} · {rp((o.items||[]).reduce((s,i)=>s+i.hargaJual*i.qty,0))}</div>
-                      </div>
-                      <div style={{display:"flex",gap:6}}>
-                        <button style={{...S.btn("primary"),padding:"6px 10px",fontSize:11}} onClick={()=>resumeHeldOrder(o)}>Lanjutkan</button>
-                        <button style={{...S.btn("danger"),padding:"6px 8px"}} onClick={()=>setDeleteHeldModal(o)}><Trash2 size={13}/></button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
+            {(cart.length>0||heldOrders.length>0)&&(
+              <button onClick={()=>{setCartModalOpen(true);setCartModalTab(cart.length>0?"keranjang":"tertunda");}} style={{
+                position:"fixed",left:"50%",transform:"translateX(-50%)",bottom:18,zIndex:40,
+                maxWidth:isMobile?440:900,width:"calc(100% - 28px)",
+                background:"#4A2C2A",color:"#fff",border:"none",borderRadius:14,
+                padding:"12px 18px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,
+                boxShadow:"0 6px 20px rgba(0,0,0,0.25)",cursor:"pointer"}}>
+                <span style={{display:"flex",alignItems:"center",gap:8,fontWeight:800,fontSize:13}}>
+                  <ShoppingCart size={16}/> Keranjang
+                  {cart.length>0&&<span style={{background:"#fff",color:"#4A2C2A",borderRadius:99,padding:"1px 8px",fontSize:11}}>{cart.reduce((s,i)=>s+i.qty,0)}</span>}
+                  {heldOrders.length>0&&<span style={{background:"#b45309",color:"#fff",borderRadius:99,padding:"1px 8px",fontSize:11}}>{heldOrders.length} tertunda</span>}
+                </span>
+                <span style={{fontWeight:900,fontSize:14}}>{cart.length>0?rp(cartTotal):"Lihat"}</span>
+              </button>
             )}
             {todayTrx.length>0&&(
               <div style={{marginTop:16}}>
@@ -1337,6 +1308,75 @@ function MainApp({currentUser,onLogout,users,onCurrentUserUpdate,ownerEmail}){
         <div style={{fontSize:13,color:"#888",marginBottom:20}}>Stok bahan otomatis terkurangi</div>
         <button style={{...S.btn("primary"),width:"100%",padding:13}} onClick={()=>setPayModal(null)}>Transaksi Baru</button>
       </div></div>}
+
+      {/* MODAL KERANJANG (gabungan Keranjang + Order Tertunda) */}
+      {cartModalOpen&&<div style={S.overlay} onClick={()=>setCartModalOpen(false)}>
+        <div style={{...S.sheet,maxHeight:"85vh",display:"flex",flexDirection:"column"}} onClick={e=>e.stopPropagation()}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+            <div style={{fontSize:15,fontWeight:800,color:"#4A2C2A"}}>Keranjang</div>
+            <button style={{border:"none",background:"none",cursor:"pointer"}} onClick={()=>setCartModalOpen(false)}><X size={20}/></button>
+          </div>
+          <div style={{display:"flex",gap:6,marginBottom:14,background:"#f0e6d8",borderRadius:10,padding:4}}>
+            <button onClick={()=>setCartModalTab("keranjang")} style={{flex:1,border:"none",borderRadius:8,padding:"8px 6px",fontSize:12,fontWeight:700,cursor:"pointer",background:cartModalTab==="keranjang"?"#4A2C2A":"transparent",color:cartModalTab==="keranjang"?"#fff":"#6F4E37"}}>Keranjang {cart.length>0?`(${cart.reduce((s,i)=>s+i.qty,0)})`:""}</button>
+            <button onClick={()=>setCartModalTab("tertunda")} style={{flex:1,border:"none",borderRadius:8,padding:"8px 6px",fontSize:12,fontWeight:700,cursor:"pointer",background:cartModalTab==="tertunda"?"#4A2C2A":"transparent",color:cartModalTab==="tertunda"?"#fff":"#6F4E37"}}>Order Tertunda {heldOrders.length>0?`(${heldOrders.length})`:""}</button>
+          </div>
+
+          <div style={{overflowY:"auto",flex:1}}>
+            {cartModalTab==="keranjang"&&(
+              cart.length===0?(
+                <div style={{textAlign:"center",padding:"30px 0",color:"#aaa",fontSize:12}}>Keranjang masih kosong</div>
+              ):(
+                <>
+                  {cart.map(item=>(
+                    <div key={item.cartKey} style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+                      <div style={{flex:1}}><div style={{fontSize:12,fontWeight:600,color:"#2d1a0e"}}>{item.nama}</div><div style={{fontSize:11,color:"#888"}}>{rp(item.hargaJual)}/cup</div></div>
+                      <div style={{display:"flex",alignItems:"center",gap:4}}>
+                        <button onClick={()=>updateQty(item.cartKey,-1)} style={{border:"1px solid #e0d0c0",borderRadius:6,padding:"3px 8px",background:"#fff",cursor:"pointer"}}><Minus size={12}/></button>
+                        <span style={{fontSize:13,fontWeight:700,minWidth:18,textAlign:"center"}}>{item.qty}</span>
+                        <button onClick={()=>updateQty(item.cartKey,1)} style={{border:"1px solid #e0d0c0",borderRadius:6,padding:"3px 8px",background:"#fff",cursor:"pointer"}}><Plus size={12}/></button>
+                      </div>
+                      <div style={{fontSize:13,fontWeight:700,color:"#4A2C2A",minWidth:65,textAlign:"right"}}>{rp(item.hargaJual*item.qty)}</div>
+                    </div>
+                  ))}
+                </>
+              )
+            )}
+            {cartModalTab==="tertunda"&&(
+              heldOrders.length===0?(
+                <div style={{textAlign:"center",padding:"30px 0",color:"#aaa",fontSize:12}}>Belum ada order tertunda</div>
+              ):heldOrders.map(o=>(
+                <div key={o.id} style={{...S.card,padding:10,marginBottom:8,borderLeft:"3px solid #b45309"}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:12,fontWeight:800,color:"#4A2C2A"}}>{o.namaCustomer}</div>
+                      <div style={{fontSize:11,color:"#888",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{(o.items||[]).map(i=>`${i.nama}×${i.qty}`).join(", ")}</div>
+                      <div style={{fontSize:10,color:"#aaa"}}>{new Date(o.waktu).toLocaleTimeString("id-ID",{hour:"2-digit",minute:"2-digit"})} · {rp((o.items||[]).reduce((s,i)=>s+i.hargaJual*i.qty,0))}</div>
+                    </div>
+                    <div style={{display:"flex",gap:6}}>
+                      <button style={{...S.btn("primary"),padding:"6px 10px",fontSize:11}} onClick={()=>resumeHeldOrder(o)}>Lanjutkan</button>
+                      <button style={{...S.btn("danger"),padding:"6px 8px"}} onClick={()=>setDeleteHeldModal(o)}><Trash2 size={13}/></button>
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          {cartModalTab==="keranjang"&&cart.length>0&&(
+            <div style={{borderTop:"1px solid #f0e6d8",paddingTop:10,marginTop:10}}>
+              <div style={{display:"flex",justifyContent:"space-between",marginBottom:10}}>
+                <span style={{fontSize:14,fontWeight:700,color:"#4A2C2A"}}>Total</span>
+                <span style={{fontSize:18,fontWeight:900,color:"#4A2C2A"}}>{rp(cartTotal)}</span>
+              </div>
+              <div style={{display:"flex",gap:8}}>
+                <button style={{...S.btn("secondary"),flex:1,padding:10}} onClick={()=>setCart([])}>Batal</button>
+                <button style={{...S.btn("secondary"),flex:1,padding:10,fontSize:12}} onClick={()=>setHeldNameModal(true)}>Simpan Order</button>
+                <button style={{...S.btn("primary"),flex:2,padding:10}} onClick={()=>{setCartModalOpen(false);setPayModal("pilih");}}>Bayar {rp(cartTotal)}</button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>}
 
       {/* SIMPAN ORDER (HELD ORDER) MODAL */}
       {heldNameModal&&<div style={S.overlay} onClick={()=>{setHeldNameModal(false);setHeldNameInput("");}}>
