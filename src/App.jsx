@@ -184,6 +184,9 @@ function MainApp({currentUser,onLogout,users,onCurrentUserUpdate,ownerEmail}){
   const [kategoriProdukList,setKategoriProdukList]=useState([]);
   const [addonList,setAddonList]=useState([]);
   const [cart,setCart]=useState([]);
+  const [heldOrders,setHeldOrders]=useState([]);
+  const [heldNameModal,setHeldNameModal]=useState(false);
+  const [heldNameInput,setHeldNameInput]=useState("");
   const [transaksi,setTransaksi]=useState([]);
   const [kas,setKas]=useState([]);
   const [syncStatus,setSyncStatus]=useState("connecting"); // connecting | online | error
@@ -250,13 +253,16 @@ function MainApp({currentUser,onLogout,users,onCurrentUserUpdate,ownerEmail}){
       setTransaksi(list.map(t=>({...t,waktu:new Date(t.waktu)})).sort((a,b)=>b.waktu-a.waktu));
     });
     const unsubKas = subscribeCollection("kopincang_kas", (list)=>{ setKas(list); });
+    const unsubHeld = subscribeCollection("kopincang_held_orders", (list)=>{
+      setHeldOrders(list.sort((a,b)=>new Date(b.waktu)-new Date(a.waktu)));
+    });
     const unsubSettings = subscribeDoc("kopincang_settings","main",(data)=>{
       if(data && typeof data.targetMargin==="number") setTargetMarginLocal(data.targetMargin);
       else writeDoc("kopincang_settings","main",{targetMargin:60});
     }, {targetMargin:60});
     setSeeded(true);
     setSyncStatus("online");
-    return ()=>{ unsubBahan();unsubProduk();unsubAddon();unsubKategori();unsubTrx();unsubKas();unsubSettings(); };
+    return ()=>{ unsubBahan();unsubProduk();unsubAddon();unsubKategori();unsubTrx();unsubKas();unsubHeld();unsubSettings(); };
     // eslint-disable-next-line
   },[]);
 
@@ -356,6 +362,25 @@ function MainApp({currentUser,onLogout,users,onCurrentUserUpdate,ownerEmail}){
     });
   }
   function updateQty(cartKey,d){setCart(prev=>prev.map(i=>i.cartKey===cartKey?{...i,qty:i.qty+d}:i).filter(i=>i.qty>0));}
+
+  function saveHeldOrder(){
+    const nama=heldNameInput.trim();
+    if(!nama||cart.length===0) return;
+    const id=uid();
+    writeDoc("kopincang_held_orders", id, {
+      id, namaCustomer:nama, items:cart, diskonInput, diskonMode, adminInput, adminMode,
+      waktu:new Date().toISOString(), dibuatOleh:currentUser.nama,
+    });
+    setCart([]); setDiskonInput(0); setAdminInput(0);
+    setHeldNameModal(false); setHeldNameInput("");
+  }
+  function resumeHeldOrder(order){
+    if(cart.length>0 && !window.confirm(`Keranjang saat ini belum kosong. Timpa dengan order "${order.namaCustomer}"?`)) return;
+    setCart(order.items||[]);
+    setDiskonInput(order.diskonInput||0); setDiskonMode(order.diskonMode||"rp");
+    setAdminInput(order.adminInput||0); setAdminMode(order.adminMode||"rp");
+    removeDoc("kopincang_held_orders", order.id);
+  }
 
   function deductStock(items){
     const deltas={};
@@ -779,9 +804,30 @@ function MainApp({currentUser,onLogout,users,onCurrentUserUpdate,ownerEmail}){
                   </div>
                   <div style={{display:"flex",gap:8}}>
                     <button style={{...S.btn("secondary"),flex:1,padding:10}} onClick={()=>setCart([])}>Batal</button>
+                    <button style={{...S.btn("secondary"),flex:1,padding:10,fontSize:12}} onClick={()=>setHeldNameModal(true)}>Simpan Order</button>
                     <button style={{...S.btn("primary"),flex:2,padding:10}} onClick={()=>setPayModal("pilih")}>Bayar {rp(cartTotal)}</button>
                   </div>
                 </div>
+              </div>
+            )}
+            {heldOrders.length>0&&(
+              <div style={{marginTop:16}}>
+                <div style={{fontSize:13,fontWeight:700,color:"#4A2C2A",marginBottom:8,display:"flex",alignItems:"center",gap:6}}><Receipt size={14}/> Order Tertunda ({heldOrders.length})</div>
+                {heldOrders.map(o=>(
+                  <div key={o.id} style={{...S.card,padding:10,marginBottom:8,borderLeft:"3px solid #b45309"}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontSize:12,fontWeight:800,color:"#4A2C2A"}}>{o.namaCustomer}</div>
+                        <div style={{fontSize:11,color:"#888",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{(o.items||[]).map(i=>`${i.nama}×${i.qty}`).join(", ")}</div>
+                        <div style={{fontSize:10,color:"#aaa"}}>{new Date(o.waktu).toLocaleTimeString("id-ID",{hour:"2-digit",minute:"2-digit"})} · {rp((o.items||[]).reduce((s,i)=>s+i.hargaJual*i.qty,0))}</div>
+                      </div>
+                      <div style={{display:"flex",gap:6}}>
+                        <button style={{...S.btn("primary"),padding:"6px 10px",fontSize:11}} onClick={()=>resumeHeldOrder(o)}>Lanjutkan</button>
+                        <button style={{...S.btn("danger"),padding:"6px 8px"}} onClick={()=>{ if(window.confirm(`Hapus order "${o.namaCustomer}"?`)) removeDoc("kopincang_held_orders",o.id); }}><Trash2 size={13}/></button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
             {todayTrx.length>0&&(
@@ -1290,6 +1336,22 @@ function MainApp({currentUser,onLogout,users,onCurrentUserUpdate,ownerEmail}){
         <div style={{fontSize:13,color:"#888",marginBottom:20}}>Stok bahan otomatis terkurangi</div>
         <button style={{...S.btn("primary"),width:"100%",padding:13}} onClick={()=>setPayModal(null)}>Transaksi Baru</button>
       </div></div>}
+
+      {/* SIMPAN ORDER (HELD ORDER) MODAL */}
+      {heldNameModal&&<div style={S.overlay} onClick={()=>{setHeldNameModal(false);setHeldNameInput("");}}>
+        <div style={S.sheet} onClick={e=>e.stopPropagation()}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+            <div style={{fontSize:15,fontWeight:800,color:"#4A2C2A"}}>Simpan Order</div>
+            <button style={{border:"none",background:"none",cursor:"pointer"}} onClick={()=>{setHeldNameModal(false);setHeldNameInput("");}}><X size={20}/></button>
+          </div>
+          <div style={{marginBottom:14}}>
+            <label style={S.label}>Nama Customer</label>
+            <input style={S.input} autoFocus value={heldNameInput} onChange={e=>setHeldNameInput(e.target.value)} placeholder="cth: Budi" onKeyDown={e=>{ if(e.key==="Enter") saveHeldOrder(); }}/>
+          </div>
+          <div style={{fontSize:11,color:"#888",marginBottom:14}}>Keranjang ({cart.reduce((s,i)=>s+i.qty,0)} item, {rp(cartTotal)}) akan disimpan dan bisa dilanjutkan nanti dari daftar "Order Tertunda".</div>
+          <button disabled={!heldNameInput.trim()} style={{...S.btn("primary"),width:"100%",padding:13,opacity:!heldNameInput.trim()?0.4:1}} onClick={saveHeldOrder}>Simpan Order</button>
+        </div>
+      </div>}
 
       {/* CANCEL MODAL */}
       {cancelModal&&<div style={S.overlay} onClick={()=>setCancelModal(null)}>
